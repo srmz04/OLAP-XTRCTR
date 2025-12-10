@@ -1,0 +1,76 @@
+name: OLAP Scanner
+
+on:
+  workflow_dispatch:
+    inputs:
+      catalog:
+        description: 'Catalog to scan (e.g., sis2011, SIS_2025)'
+        required: false
+        default: ''
+      mode:
+        description: 'Scan mode: discover, explore, or data'
+        required: true
+        default: 'discover'
+        type: choice
+        options:
+          - discover
+          - explore
+          - data
+
+env:
+  DGIS_SERVER: ${{ secrets.DGIS_SERVER }}
+  DGIS_USER: ${{ secrets.DGIS_USER }}
+  DGIS_PASSWORD: ${{ secrets.DGIS_PASSWORD }}
+
+jobs:
+  scan:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Download OLEDB Provider
+        shell: powershell
+        run: |
+          $url = "https://download.microsoft.com/download/4/C/E/4CEB9E10-D526-4F42-8CCF-2EA8B43C96C7/ENU/x64/SQL_AS_OLEDB.msi"
+          $output = "SQL_AS_OLEDB.msi"
+          Invoke-WebRequest -Uri $url -OutFile $output
+          Write-Host "Downloaded OLEDB Provider"
+      
+      - name: Install OLEDB Provider
+        shell: powershell
+        run: |
+          Start-Process msiexec.exe -ArgumentList '/i', 'SQL_AS_OLEDB.msi', '/quiet', '/norestart' -Wait
+          Write-Host "Installed OLEDB Provider"
+      
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r scanner/requirements.txt
+      
+      - name: Run OLAP Scanner
+        shell: powershell
+        env:
+          DGIS_SERVER: ${{ secrets.DGIS_SERVER }}
+          DGIS_USER: ${{ secrets.DGIS_USER }}
+          DGIS_PASSWORD: ${{ secrets.DGIS_PASSWORD }}
+        run: |
+          cd scanner
+          python DGIS_SCAN_2_stable.py --mode ${{ github.event.inputs.mode }} ${{ github.event.inputs.catalog && format('--catalog {0}', github.event.inputs.catalog) || '' }}
+      
+      - name: Upload scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: olap-scan-results
+          path: |
+            scanner/olap_discovery/
+            scanner/*.csv
+            scanner/*.xlsx
+          retention-days: 30

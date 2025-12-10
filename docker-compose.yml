@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DGIS_SERVER=${DGIS_SERVER:-reportesdgis.salud.gob.mx}
+      - DGIS_USER=${DGIS_USER}
+      - DGIS_PASSWORD=${DGIS_PASSWORD}
+    volumes:
+      - ./backend:/app
+      - olap_data:/app/olap_discovery
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    volumes:
+      - ./frontend/src:/app/src
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  olap_data:
