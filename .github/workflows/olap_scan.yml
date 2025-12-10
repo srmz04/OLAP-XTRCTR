@@ -17,14 +17,14 @@ on:
           - explore
           - data
 
-env:
-  DGIS_SERVER: ${{ secrets.DGIS_SERVER }}
-  DGIS_USER: ${{ secrets.DGIS_USER }}
-  DGIS_PASSWORD: ${{ secrets.DGIS_PASSWORD }}
-
 jobs:
   scan:
     runs-on: windows-latest
+    
+    env:
+      DGIS_SERVER: ${{ secrets.DGIS_SERVER }}
+      DGIS_USER: ${{ secrets.DGIS_USER }}
+      DGIS_PASSWORD: ${{ secrets.DGIS_PASSWORD }}
     
     steps:
       - name: Checkout repository
@@ -34,7 +34,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
       
       - name: Download OLEDB Provider
         shell: powershell
@@ -57,16 +56,13 @@ jobs:
       
       - name: Run OLAP Scanner
         shell: powershell
-        env:
-          DGIS_SERVER: ${{ secrets.DGIS_SERVER }}
-          DGIS_USER: ${{ secrets.DGIS_USER }}
-          DGIS_PASSWORD: ${{ secrets.DGIS_PASSWORD }}
         run: |
           cd scanner
-          python DGIS_SCAN_2_stable.py --mode ${{ github.event.inputs.mode }} ${{ github.event.inputs.catalog && format('--catalog {0}', github.event.inputs.catalog) || '' }}
+          python DGIS_SCAN_2_stable.py --mode ${{ github.event.inputs.mode }}
       
       - name: Upload scan results
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: olap-scan-results
           path: |
