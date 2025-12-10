@@ -38,7 +38,7 @@ jobs:
       - name: Download OLEDB Provider
         shell: powershell
         run: |
-          $url = "https://download.microsoft.com/download/4/C/E/4CEB9E10-D526-4F42-8CCF-2EA8B43C96C7/ENU/x64/SQL_AS_OLEDB.msi"
+          $url = "https://go.microsoft.com/fwlink/?linkid=829576"
           $output = "SQL_AS_OLEDB.msi"
           Invoke-WebRequest -Uri $url -OutFile $output
           Write-Host "Downloaded OLEDB Provider"
