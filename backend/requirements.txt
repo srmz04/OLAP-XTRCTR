@@ -5,8 +5,14 @@ pydantic-settings==2.1.0
 python-dotenv==1.0.0
 python-multipart==0.0.6
 
+# Cache and async
+redis>=5.0.0
+aiofiles>=23.0.0
+
 # Dependencias del proyecto original
 pandas>=1.5.0
 adodbapi>=2.6.0
 openpyxl>=3.1.0
 colorama>=0.4.6
+tqdm>=4.65.0
+rich>=13.0.0

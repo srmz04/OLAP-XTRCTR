@@ -11,9 +11,17 @@ services:
       - DGIS_SERVER=${DGIS_SERVER:-reportesdgis.salud.gob.mx}
       - DGIS_USER=${DGIS_USER}
       - DGIS_PASSWORD=${DGIS_PASSWORD}
+      - REDIS_URL=redis://redis:6379
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./backend:/app
+      - ./scanner:/app/scanner:ro
       - olap_data:/app/olap_discovery
+    command: uvicorn api_server:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - redis
+    networks:
+      - olap-network
     restart: unless-stopped
 
   frontend:
@@ -26,9 +34,29 @@ services:
       - VITE_API_URL=http://localhost:8000
     volumes:
       - ./frontend/src:/app/src
+      - /app/node_modules
+    command: npm run dev -- --host
     depends_on:
       - backend
+    networks:
+      - olap-network
     restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - olap-network
+    restart: unless-stopped
+
+networks:
+  olap-network:
+    driver: bridge
 
 volumes:
   olap_data:
+  redis_data:
