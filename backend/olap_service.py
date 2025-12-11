@@ -498,11 +498,11 @@ def get_service() -> OlapService:
     if _service_instance is None:
         if not COM_AVAILABLE:
             try:
-                from mock_service import MockOlapService
-                _service_instance = MockOlapService()
+                from mock_service import SnapshotOlapService
+                _service_instance = SnapshotOlapService()
             except ImportError as e:
                 import logging
-                logging.getLogger(__name__).error(f"Could not load MockOlapService: {e}")
+                logging.getLogger(__name__).error(f"Could not load SnapshotOlapService: {e}")
                 _service_instance = OlapService()
         else:
             _service_instance = OlapService()

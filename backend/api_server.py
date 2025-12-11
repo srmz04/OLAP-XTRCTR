@@ -9,7 +9,12 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import logging
 
-from olap_service import OlapService, get_service
+from olap_service import get_service, OlapService
+# Explicit import for type hinting if needed, though get_service abstraction handles it
+try:
+    from mock_service import SnapshotOlapService
+except ImportError:
+    pass
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -25,8 +30,8 @@ app = FastAPI(
 # CORS para desarrollo (permite cualquier origin)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permitir cualquier origen (desarrollo)
-    allow_credentials=False,  # Debe ser False cuando origins es *
+    allow_origins=["*"],  # Allow all origins for local dev/network access
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
