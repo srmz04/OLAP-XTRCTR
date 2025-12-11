@@ -33,7 +33,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
       
       - name: Download OLEDB Provider
         shell: powershell
@@ -51,8 +51,8 @@ jobs:
       
       - name: Install Python dependencies
         run: |
-          pip install --upgrade pip
-          pip install -r scanner/requirements.txt
+          pip install --upgrade pip setuptools wheel
+          pip install --prefer-binary -r scanner/requirements.txt
       
       - name: Run OLAP Scanner
         shell: powershell
