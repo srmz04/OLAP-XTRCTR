@@ -25,29 +25,50 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v3
 
-    - name: Set up Python 3.11
+    - name: Set up Python 3.10
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'
+        python-version: '3.10'
         cache: 'pip'
 
-    - name: Install Dependencies
+    - name: Cache OLEDB Installer
+      id: cache-oledb
+      uses: actions/cache@v3
+      with:
+        path: oledb.msi
+        key: oledb-installer-v1
+
+    - name: Download OLEDB Provider
+      if: steps.cache-oledb.outputs.cache-hit != 'true'
+      shell: powershell
       run: |
-        pip install pandas adodbapi openpyxl colorama tqdm rich
+        $url = "https://download.microsoft.com/download/4/D/D/4DD7C69E-52F6-44C0-8356-347D34B21F7A/SQL_AS_OLEDB.msi"
+        Invoke-WebRequest -Uri $url -OutFile "oledb.msi"
 
     - name: Install MSOLAP OLEDB Driver
       shell: powershell
       run: |
-        Write-Host "Downloading SQL AS OLEDB..."
-        $url = "https://download.microsoft.com/download/4/D/D/4DD7C69E-52F6-44C0-8356-347D34B21F7A/SQL_AS_OLEDB.msi"
-        $out = "oledb.msi"
-        Invoke-WebRequest -Uri $url -OutFile $out
-        
-        Write-Host "Installing MSI..."
-        Start-Process msiexec.exe -ArgumentList '/i', $out, '/quiet', '/norestart' -NoNewWindow -Wait
-        
-        Write-Host "Verification (optional)..."
-        # Can't easily verify registry in restricted shell, but if msiexec passed, we assume success.
+        Start-Process msiexec.exe -ArgumentList '/i', 'oledb.msi', '/quiet', '/norestart' -NoNewWindow -Wait
+
+    - name: Install Core Dependencies
+      shell: powershell
+      run: |
+        # CRITICAL: Downgrade setuptools to support 2to3 for adodbapi
+        python -m pip install --upgrade pip
+        pip install "setuptools==57.5.0" wheel
+
+    - name: Install adodbapi from Source
+      shell: powershell
+      run: |
+        $url = "https://files.pythonhosted.org/packages/source/a/adodbapi/adodbapi-2.6.2.0.zip"
+        Invoke-WebRequest -Uri $url -OutFile "adodbapi.zip"
+        Expand-Archive -Path "adodbapi.zip" -DestinationPath "adodb_src" -Force
+        cd adodb_src\adodbapi-2.6.2.0
+        python setup.py install
+
+    - name: Install Project Dependencies
+      run: |
+        pip install pandas openpyxl colorama tqdm rich
 
     - name: Execute OLAP Action
       env:
@@ -56,7 +77,6 @@ jobs:
         DGIS_PASSWORD: ${{ secrets.DGIS_PASSWORD }}
         PYTHONPATH: ${{ github.workspace }}/backend
       run: |
-        # Run the robust wrapper script
         python backend/run_action.py "${{ inputs.mode }}" "${{ inputs.catalog }}"
 
     - name: List Generated Files (Debug)

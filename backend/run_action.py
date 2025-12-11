@@ -15,10 +15,11 @@ logger = logging.getLogger(__name__)
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from DGIS_SCAN_2 import Config, ConnectionManager, MDXQueryTool, rows_to_df
     import adodbapi
+    from DGIS_SCAN_2 import Config, ConnectionManager, MDXQueryTool, rows_to_df
 except ImportError as e:
     logger.error(f"Faltan dependencias críticas: {e}")
+    # Force exit if adodbapi is strictly required and missing
     sys.exit(1)
 
 def run_test_connection(config: Config):
@@ -41,7 +42,7 @@ def run_test_connection(config: Config):
             
     except Exception as e:
         logger.error(f"❌ Falló la conexión: {e}")
-        traceback.print_exc()
+        # traceback.print_exc()
         return False
 
 def run_scan_with_metadata(config: Config, catalog: str):
@@ -62,11 +63,6 @@ def run_scan_with_metadata(config: Config, catalog: str):
         try:
             meta_df = pd.read_csv(metadata_file)
             logger.info(f"   Cargados {len(meta_df)} registros de metadata.")
-            
-            # Analizar dimensiones disponibles
-            if 'DIMENSION' in meta_df.columns:
-                dims = meta_df['DIMENSION'].unique()
-                logger.info(f"   Dimensiones conocidas: {dims[:5]}...")
         except Exception as e:
             logger.warning(f"   No se pudo leer metadata local: {e}")
     else:
@@ -75,20 +71,16 @@ def run_scan_with_metadata(config: Config, catalog: str):
     # 2. Ejecutar consulta real
     tool = MDXQueryTool(config)
     
-    # Consulta de prueba: Total por alguna dimensión común (ej. Entidad o Año)
-    # Intentamos adivinar una consulta segura basada en dimensiones estándar
+    # Consulta de prueba: Metadata básica (Miembros) - Rápido y seguro
     queries = [
-        # Query 1: Metadata básica (Miembros) - Rápido y seguro
         (f"SELECT * FROM [{catalog}].$system.MDSCHEMA_MEMBERS", "members_dump"),
-        
-        # Query 2: Una medida simple (si supiéramos el nombre)
-        # "SELECT {[Measures].AllMembers} ON COLUMNS FROM [{catalog}]" 
+        (f"SELECT * FROM $system.DBSCHEMA_CATALOGS", "catalogs_dump")
     ]
     
     success_count = 0
     
     for mdx, label in queries:
-        logger.info(f"Ejecutando MDX [{label}]: {mdx[:100]}...")
+        logger.info(f"Ejecutando MDX [{label}]...")
         try:
             # Limitamos a 1000 filas para no saturar el runner
             with ConnectionManager(config, catalog) as conn:
