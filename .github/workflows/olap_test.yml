@@ -53,7 +53,7 @@ jobs:
     - name: Install Core Dependencies
       shell: powershell
       run: |
-        # CRITICAL: Downgrade setuptools to support 2to3 for adodbapi
+        # CRITICAL: Downgrade setuptools to support 2to3 for adodbapi (EXACT as working scanner)
         python -m pip install --upgrade pip
         pip install "setuptools==57.5.0" wheel
 
@@ -68,7 +68,8 @@ jobs:
 
     - name: Install Project Dependencies
       run: |
-        pip install pandas openpyxl colorama tqdm rich
+        # EXACT LIST from working config (added pywin32)
+        pip install pandas>=1.5.0 openpyxl>=3.1.0 colorama>=0.4.6 tqdm>=4.65.0 rich>=13.0.0 pywin32>=306
 
     - name: Execute OLAP Action
       env:
