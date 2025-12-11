@@ -40,3 +40,4 @@ dist/
 # Build
 build/
 *.egg-info/
+PROPOSAL.json
