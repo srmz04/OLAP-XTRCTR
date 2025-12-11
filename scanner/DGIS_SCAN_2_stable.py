@@ -1628,11 +1628,47 @@ def menu_principal(config: Config):
         
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='DGIS OLAP Scanner')
+    parser.add_argument('--mode', choices=['discover', 'explore', 'data', 'cli'], default='discover', help='Operation mode')
+    parser.add_argument('--catalog', help='Catalog to use (required for --query)')
+    parser.add_argument('--query', help='MDX Query to execute directly')
+    args = parser.parse_args()
+
     config = Config()
     logger = setup_logging(config)
-    logger.info("Sistema iniciado v4.1")
+    logger.info("Sistema iniciado v4.1 (CLI Support)")
+
     try:
-        menu_principal(config)
+        if args.query:
+            if not args.catalog:
+                print(f"{Fore.RED}[ERROR] --catalog is required when using --query{Style.RESET_ALL}")
+                sys.exit(1)
+            
+            print(f"{Fore.CYAN}[CLI] Executing custom MDX query on {args.catalog}...{Style.RESET_ALL}")
+            tool = MDXQueryTool(config)
+            df = tool.execute_mdx(args.catalog, args.query)
+            
+            if not df.empty:
+                print(f"\n{Fore.GREEN}[SUCCESS] {len(df)} rows returned.{Style.RESET_ALL}")
+                # Save to file
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"query_result_{timestamp}"
+                output_path = Path(config.output_dir) / f"{filename}.csv"
+                df.to_csv(output_path, index=False)
+                print(f"Saved results to: {output_path}")
+                print(df.head(20))
+            else:
+                print(f"{Fore.YELLOW}[WARN] No data returned.{Style.RESET_ALL}")
+                
+        elif args.mode == 'discover':
+             # Default behavior (interactive menu handling usually starts here in legacy mode, 
+             # but user might want non-interactive discovery. 
+             # For now, if no specific CLI args, we explicitly start interactive menu)
+             menu_principal(config)
+        else:
+             menu_principal(config)
+
     except KeyboardInterrupt:
         print(f"\n\n{Fore.YELLOW}[!] Operacion interrumpida{Style.RESET_ALL}")
     except Exception as e:

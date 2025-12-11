@@ -7,6 +7,10 @@ on:
         description: 'Catalog to scan (e.g., sis2011, SIS_2025)'
         required: false
         default: ''
+      query:
+        description: 'MDX Query to execute (requires catalog)'
+        required: false
+        default: ''
       mode:
         description: 'Scan mode: discover, explore, or data'
         required: true
@@ -73,7 +77,7 @@ jobs:
         shell: powershell
         run: |
           cd scanner
-          python DGIS_SCAN_2_stable.py --mode ${{ github.event.inputs.mode }}
+          python DGIS_SCAN_2_stable.py --mode ${{ github.event.inputs.mode }} ${{ github.event.inputs.catalog && format('--catalog {0}', github.event.inputs.catalog) || '' }} ${{ github.event.inputs.query && format('--query "{0}"', github.event.inputs.query) || '' }}
       
       - name: Upload scan results
         uses: actions/upload-artifact@v4
