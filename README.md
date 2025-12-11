@@ -12,6 +12,9 @@
    - `DGIS_PASSWORD`: Tu contraseña
 
 2. **Ejecutar** desde Actions → OLAP Scanner → Run workflow
+   - **Catalog**: (Opcional) Ej: `sis2011`
+   - **Query**: (Opcional) Tu query MDX personalizado. Ej: `SELECT {} ON COLUMNS FROM [sis2011]`
+   - **Mode**: Seleccionar `discover` (default) o `cli` (si usas query via CLI)
 
 3. **Descargar** resultados desde Artifacts
 
@@ -65,6 +68,12 @@ OLAP XTRCTR/
 | `discover` | Escanea rowsets y catálogos disponibles |
 | `explore` | Extrae metadatos completos de un catálogo |
 | `data` | Constructor interactivo de consultas MDX |
+| `cli` | Ejecución directa de queries MDX personalizados |
+
+### Ejecución CLI directa
+```bash
+python DGIS_SCAN_2_stable.py --query "SELECT {} ON COLUMNS FROM [sis2011]" --catalog "sis2011"
+```
 
 ---
 

@@ -26,9 +26,9 @@ jobs:
     runs-on: windows-latest
     
     env:
-      DGIS_SERVER: ${{ secrets.DGIS_SERVER }}
-      DGIS_USER: ${{ secrets.DGIS_USER }}
-      DGIS_PASSWORD: ${{ secrets.DGIS_PASSWORD }}
+      DGIS_SERVER: '${{ secrets.DGIS_SERVER }}'
+      DGIS_USER: '${{ secrets.DGIS_USER }}'
+      DGIS_PASSWORD: '${{ secrets.DGIS_PASSWORD }}'
     
     steps:
       - name: Checkout repository
