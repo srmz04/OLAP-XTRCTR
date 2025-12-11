@@ -7,24 +7,25 @@ on:
         description: 'Catalog to test'
         required: false
         default: 'SIS_2025'
-      query_type:
-        description: 'Type of test'
+      mode:
+        description: 'Execution Mode'
         required: true
-        default: 'catalogs'
+        default: 'scan'
         type: choice
         options:
-        - catalogs
-        - dimension_members
-        - full_scan
+        - test
+        - scan
 
 jobs:
-  test_windows_connection:
+  run_olap_task:
+    name: Run OLAP Task on Windows
     runs-on: windows-latest
     
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout Repository
+      uses: actions/checkout@v3
 
-    - name: Set up Python
+    - name: Set up Python 3.11
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
@@ -34,75 +35,37 @@ jobs:
       run: |
         pip install pandas adodbapi openpyxl colorama tqdm rich
 
-    - name: Install OLEDB Driver
+    - name: Install MSOLAP OLEDB Driver
+      shell: powershell
       run: |
-        # Download and install MSOLAP driver silently
-        Invoke-WebRequest -Uri "https://download.microsoft.com/download/4/D/D/4DD7C69E-52F6-44C0-8356-347D34B21F7A/SQL_AS_OLEDB.msi" -OutFile "oledb.msi"
-        Start-Process msiexec.exe -ArgumentList '/i', 'oledb.msi', '/quiet', '/norestart' -NoNewWindow -Wait
+        Write-Host "Downloading SQL AS OLEDB..."
+        $url = "https://download.microsoft.com/download/4/D/D/4DD7C69E-52F6-44C0-8356-347D34B21F7A/SQL_AS_OLEDB.msi"
+        $out = "oledb.msi"
+        Invoke-WebRequest -Uri $url -OutFile $out
+        
+        Write-Host "Installing MSI..."
+        Start-Process msiexec.exe -ArgumentList '/i', $out, '/quiet', '/norestart' -NoNewWindow -Wait
+        
+        Write-Host "Verification (optional)..."
+        # Can't easily verify registry in restricted shell, but if msiexec passed, we assume success.
 
-    - name: Run Test Script
+    - name: Execute OLAP Action
       env:
         DGIS_SERVER: ${{ secrets.DGIS_SERVER }}
         DGIS_USER: ${{ secrets.DGIS_USER }}
         DGIS_PASSWORD: ${{ secrets.DGIS_PASSWORD }}
+        PYTHONPATH: ${{ github.workspace }}/backend
       run: |
-        # Create a simple test script on the fly
-        $script = @"
-        import os
-        import sys
-        import adodbapi
-        import pandas as pd
-        
-        server = os.environ.get('DGIS_SERVER')
-        user = os.environ.get('DGIS_USER')
-        password = os.environ.get('DGIS_PASSWORD')
-        catalog = '${{ inputs.catalog }}'
-        test_type = '${{ inputs.query_type }}'
-        
-        conn_str = f'Provider=MSOLAP;Data Source={server};User ID={user};Password={password};'
-        
-        print(f'Connecting to {server}...')
-        try:
-            conn = adodbapi.connect(conn_str)
-            print('✅ Connection Successful!')
-            
-            cursor = conn.cursor()
-            
-            if test_type == 'catalogs':
-                print('Listing catalogs...')
-                cursor.execute('SELECT * FROM $system.DBSCHEMA_CATALOGS')
-                data = cursor.fetchall()
-                if data:
-                    df = pd.DataFrame(list(data))
-                    print(df)
-                    df.to_csv('results_catalogs.csv', index=False)
-                    print(f'✅ Found {len(data)} catalogs')
-                else:
-                    print('⚠️ No catalogs found')
-            
-            elif test_type == 'dimension_members':
-                print(f'Listing members for {catalog}...')
-                cursor.execute(f'SELECT * FROM [{catalog}].$system.MDSCHEMA_MEMBERS')
-                # Fetch small sample
-                data = cursor.fetchmany(100)
-                if data:
-                    df = pd.DataFrame(list(data))
-                    df.to_csv('results_members.csv', index=False)
-                    print(f'✅ Retrieved {len(data)} sample members')
-            
-            conn.close()
-            
-        except Exception as e:
-            print(f'❌ Error: {e}')
-            sys.exit(1)
-        "@
-        
-        Set-Content -Path test_olap.py -Value $script
-        python test_olap.py
+        # Run the robust wrapper script
+        python backend/run_action.py "${{ inputs.mode }}" "${{ inputs.catalog }}"
+
+    - name: List Generated Files (Debug)
+      if: always()
+      run: dir
 
     - name: Upload Results
-      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: olap-test-results
+        name: olap-results-${{ inputs.catalog }}
         path: "*.csv"
+        if-no-files-found: warn

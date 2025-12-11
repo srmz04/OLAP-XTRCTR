@@ -1,27 +1,31 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OLAP XTRCTR - Status</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
+
 <body class="bg-gray-100 p-8">
     <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6">
         <h1 class="text-3xl font-bold mb-4 text-blue-600">OLAP XTRCTR Status</h1>
-        
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div class="p-4 border rounded bg-green-50">
                 <h2 class="font-bold text-lg mb-2">Backend (Linux/Dev)</h2>
-                <span class="inline-block px-2 py-1 bg-green-200 text-green-800 rounded text-sm">Online (Mock Mode)</span>
+                <span class="inline-block px-2 py-1 bg-green-200 text-green-800 rounded text-sm">Online (Mock
+                    Mode)</span>
                 <p class="text-sm mt-2 text-gray-600">Simulación con datos locales CSV.</p>
             </div>
-            
+
             <div class="p-4 border rounded bg-blue-50">
                 <h2 class="font-bold text-lg mb-2">Backend (Windows/Prod)</h2>
                 <span class="inline-block px-2 py-1 bg-blue-200 text-blue-800 rounded text-sm">Via GitHub Actions</span>
                 <p class="text-sm mt-2 text-gray-600">Tests reales contra reportesdgis.salud.gob.mx</p>
-                <a href="https://github.com/srmz04/OLAP-XTRCTR/actions" class="text-blue-600 hover:underline mt-2 block">Ver Actions &rarr;</a>
+                <a href="https://github.com/srmz04/OLAP-XTRCTR/actions"
+                    class="text-blue-600 hover:underline mt-2 block">Ver Actions &rarr;</a>
             </div>
         </div>
 
@@ -32,9 +36,10 @@
         </ul>
 
         <div class="bg-gray-800 text-white p-4 rounded font-mono text-sm overflow-x-auto">
-            <p># Ejecutar Test Remoto:</p>
-            <p>gh workflow run "OLAP Live Test" -f query_type=catalogs</p>
+            <p># Ejecutar Escaneo Inteligente (Windows):</p>
+            <p>gh workflow run "OLAP Live Test" -f mode=scan -f catalog=SIS_2025</p>
         </div>
     </div>
 </body>
+
 </html>
