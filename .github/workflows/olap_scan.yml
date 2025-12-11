@@ -50,10 +50,21 @@ jobs:
           Write-Host "Installed OLEDB Provider"
       
       - name: Install Python dependencies
+        shell: powershell
         run: |
+          # Upgrade pip and install base tools
           pip install --upgrade pip
-          pip install "setuptools<69" wheel
-          pip install --no-build-isolation -r scanner/requirements.txt
+          pip install "setuptools<58" wheel
+          
+          # Install adodbapi using legacy install (avoids PEP 517 wheel build)
+          pip download adodbapi --no-deps --no-binary :all: -d temp_adodb
+          Expand-Archive -Path "temp_adodb\adodbapi*.zip" -DestinationPath "temp_adodb\extracted" -Force
+          cd temp_adodb\extracted\adodbapi*
+          python setup.py install
+          cd ..\..\..
+          
+          # Install remaining deps (excluding adodbapi)
+          pip install pandas>=1.5.0 openpyxl>=3.1.0 colorama>=0.4.6 tqdm>=4.65.0 rich>=13.0.0 pywin32>=306
       
       - name: Run OLAP Scanner
         shell: powershell
