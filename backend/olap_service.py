@@ -496,5 +496,14 @@ def get_service() -> OlapService:
     """Dependency injection para FastAPI"""
     global _service_instance
     if _service_instance is None:
-        _service_instance = OlapService()
+        if not COM_AVAILABLE:
+            try:
+                from mock_service import MockOlapService
+                _service_instance = MockOlapService()
+            except ImportError as e:
+                import logging
+                logging.getLogger(__name__).error(f"Could not load MockOlapService: {e}")
+                _service_instance = OlapService()
+        else:
+            _service_instance = OlapService()
     return _service_instance
