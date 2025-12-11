@@ -1630,28 +1630,85 @@ def menu_principal(config: Config):
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='DGIS OLAP Scanner')
-    parser.add_argument('--mode', choices=['discover', 'explore', 'data', 'cli'], default='discover', help='Operation mode')
-    parser.add_argument('--catalog', help='Catalog to use (required for --query)')
-    parser.add_argument('--query', help='MDX Query to execute directly')
+    parser.add_argument('--mode', choices=['scan', 'list', 'cache', 'data', 'conf', 'cli', 'discover', 'explore'], default='interactive', help='Operation mode')
+    parser.add_argument('--catalog', help='Catalog to use (required for cache/query)')
+    parser.add_argument('--query', help='MDX Query to execute directly (for cli/data mode)')
     args = parser.parse_args()
 
     config = Config()
     logger = setup_logging(config)
-    logger.info("Sistema iniciado v4.1 (CLI Support)")
+    
+    # Mode mapping for backward compatibility or clarity
+    mode = args.mode.lower()
+    if mode == 'discover': mode = 'list'
+    if mode == 'explore': mode = 'cache'
+
+    if mode == 'interactive' and not args.query:
+        logger.info("Sistema iniciado v4.1 (Interactive)")
+        menu_principal(config)
+        return
+
+    logger.info(f"Sistema iniciado v4.1 (Mode: {mode.upper()})")
 
     try:
-        if args.query:
+        # 1. SCAN (Full Discovery)
+        if mode == 'scan':
+            print(f"\n{Fore.CYAN}[CLI] Starting Full Server Discovery...{Style.RESET_ALL}")
+            discovery = ServerDiscovery(config)
+            results = discovery.full_discovery()
+            discovery.export_results(results)
+            print(f"{Fore.GREEN}[SUCCESS] Full discovery completed.{Style.RESET_ALL}")
+
+        # 2. LIST (List Catalogs)
+        elif mode == 'list':
+            print(f"\n{Fore.CYAN}[CLI] Listing Catalogs...{Style.RESET_ALL}")
+            discovery = ServerDiscovery(config)
+            discovery.discover_generic('Catalogos', "SELECT * FROM $system.DBSCHEMA_CATALOGS", 'catalogs')
+            catalogs = discovery.discovery_results.get('catalogs', [])
+            if catalogs:
+                print(f"\n[OK] Found {len(catalogs)} catalogs:\n")
+                for idx, cat in enumerate(catalogs, 1):
+                    print(f"{idx:3d}. {Fore.GREEN}{cat.get('CATALOG_NAME', 'N/A')}{Style.RESET_ALL}")
+            else:
+                print(f"\n{Fore.RED}[ERROR] No catalogs found{Style.RESET_ALL}")
+
+        # 3. CACHE (Download Members)
+        elif mode == 'cache':
             if not args.catalog:
-                print(f"{Fore.RED}[ERROR] --catalog is required when using --query{Style.RESET_ALL}")
+                print(f"{Fore.RED}[ERROR] --catalog is required for CACHE mode{Style.RESET_ALL}")
                 sys.exit(1)
             
-            print(f"{Fore.CYAN}[CLI] Executing custom MDX query on {args.catalog}...{Style.RESET_ALL}")
+            print(f"\n{Fore.CYAN}[CLI] Downloading members for: {args.catalog}{Style.RESET_ALL}")
+            explorer = CatalogExplorer(config)
+            success = explorer.download_members_only(args.catalog)
+            if success:
+                print(f"{Fore.GREEN}[SUCCESS] Members downloaded for {args.catalog}{Style.RESET_ALL}")
+            else:
+                 print(f"{Fore.RED}[ERROR] Failed to download members{Style.RESET_ALL}")
+                 sys.exit(1)
+
+        # 4. DATA / CLI (Custom Query)
+        elif mode in ['data', 'cli']:
+            if not args.query:
+                if mode == 'data':
+                    print(f"{Fore.YELLOW}[WARN] DATA mode in CLI requires --query. Switching to interactive if local...{Style.RESET_ALL}")
+                    menu_principal(config) 
+                    return
+                else:
+                    print(f"{Fore.RED}[ERROR] --query is required for CLI mode{Style.RESET_ALL}")
+                    sys.exit(1)
+            
+            # (Execute Query Logic)
+            if not args.catalog:
+                 print(f"{Fore.RED}[ERROR] --catalog is required for query execution{Style.RESET_ALL}")
+                 sys.exit(1)
+                 
+            print(f"{Fore.CYAN}[CLI] Executing MDX query on {args.catalog}...{Style.RESET_ALL}")
             tool = MDXQueryTool(config)
             df = tool.execute_mdx(args.catalog, args.query)
             
             if not df.empty:
                 print(f"\n{Fore.GREEN}[SUCCESS] {len(df)} rows returned.{Style.RESET_ALL}")
-                # Save to file
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"query_result_{timestamp}"
                 output_path = Path(config.output_dir) / f"{filename}.csv"
@@ -1660,17 +1717,21 @@ def main():
                 print(df.head(20))
             else:
                 print(f"{Fore.YELLOW}[WARN] No data returned.{Style.RESET_ALL}")
-                
-        elif args.mode == 'discover':
-             # Default behavior (interactive menu handling usually starts here in legacy mode, 
-             # but user might want non-interactive discovery. 
-             # For now, if no specific CLI args, we explicitly start interactive menu)
-             menu_principal(config)
+
+        # 5. CONF
+        elif mode == 'conf':
+            print(f"\n{Fore.CYAN}[CONFIG] Current Configuration:{Style.RESET_ALL}")
+            print(f"Server:   {config.server}")
+            print(f"User:     {config.user}")
+            print(f"Workers:  {config.max_workers}")
+            print(f"Output:   {config.output_dir}")
+
         else:
-             menu_principal(config)
+            # Fallback
+            menu_principal(config)
 
     except KeyboardInterrupt:
-        print(f"\n\n{Fore.YELLOW}[!] Operacion interrumpida{Style.RESET_ALL}")
+        print(f"\n\n{Fore.YELLOW}[!] Operation interrupted{Style.RESET_ALL}")
     except Exception as e:
         print(f"\n{Fore.RED}[FATAL] Error: {e}{Style.RESET_ALL}")
         sys.exit(1)

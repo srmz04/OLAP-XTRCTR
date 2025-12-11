@@ -17,9 +17,11 @@ on:
         default: 'discover'
         type: choice
         options:
-          - discover
-          - explore
+          - scan
+          - list
+          - cache
           - data
+          - conf
           - cli
 
 jobs:
