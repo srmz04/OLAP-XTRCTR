@@ -52,18 +52,21 @@ jobs:
       - name: Install Python dependencies
         shell: powershell
         run: |
-          # Upgrade pip and install base tools
+          # Upgrade pip and install base tools with OLD setuptools (has build_py_2to3)
           pip install --upgrade pip
-          pip install "setuptools<58" wheel
+          pip install "setuptools==57.5.0" wheel
           
-          # Install adodbapi using legacy install (avoids PEP 517 wheel build)
-          pip download adodbapi --no-deps --no-binary :all: -d temp_adodb
-          Expand-Archive -Path "temp_adodb\adodbapi*.zip" -DestinationPath "temp_adodb\extracted" -Force
-          cd temp_adodb\extracted\adodbapi*
+          # Download adodbapi source directly from PyPI (not via pip)
+          $url = "https://files.pythonhosted.org/packages/source/a/adodbapi/adodbapi-2.6.2.0.zip"
+          Invoke-WebRequest -Uri $url -OutFile "adodbapi.zip"
+          
+          # Extract and install using legacy setup.py
+          Expand-Archive -Path "adodbapi.zip" -DestinationPath "adodb_src" -Force
+          cd adodb_src\adodbapi-2.6.2.0
           python setup.py install
-          cd ..\..\..
+          cd ..\..
           
-          # Install remaining deps (excluding adodbapi)
+          # Install remaining dependencies
           pip install pandas>=1.5.0 openpyxl>=3.1.0 colorama>=0.4.6 tqdm>=4.65.0 rich>=13.0.0 pywin32>=306
       
       - name: Run OLAP Scanner
