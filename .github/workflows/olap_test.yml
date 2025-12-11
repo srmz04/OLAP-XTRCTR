@@ -42,7 +42,7 @@ jobs:
       if: steps.cache-oledb.outputs.cache-hit != 'true'
       shell: powershell
       run: |
-        $url = "https://download.microsoft.com/download/4/D/D/4DD7C69E-52F6-44C0-8356-347D34B21F7A/SQL_AS_OLEDB.msi"
+        $url = "https://go.microsoft.com/fwlink/?linkid=829576"
         Invoke-WebRequest -Uri $url -OutFile "oledb.msi"
 
     - name: Install MSOLAP OLEDB Driver
