@@ -103,7 +103,8 @@ async function dispatchAndWait(
 
         // Check Gist directly for the request result
         try {
-            const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+            // CACHE BUSTING: Add timestamp to avoid caching (304 Not Modified)
+            const response = await fetch(`https://api.github.com/gists/${GIST_ID}?t=${Date.now()}`, {
                 headers: {
                     Authorization: `Bearer ${GITHUB_TOKEN}`,
                     Accept: 'application/vnd.github.v3+json',

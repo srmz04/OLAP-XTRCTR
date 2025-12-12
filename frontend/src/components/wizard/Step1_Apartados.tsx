@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useWizardStore } from '../../stores/wizardStore';
+import { Loader2 } from 'lucide-react';
 
 import { catalogService } from '../../api/services/catalogService';
 
@@ -90,7 +91,29 @@ export const Step1_Apartados: React.FC = () => {
     if (isLoading) {
         return (
             <div className="p-8 flex items-center justify-center">
-                <div className="text-gray-600">Cargando apartados...</div>
+                <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mr-3" />
+                <div className="text-gray-600">Cargando apartados... (esto puede tomar 30-60s la primera vez)</div>
+            </div>
+        );
+    }
+
+    if (!filteredApartados || filteredApartados.length === 0) {
+        return (
+            <div className="p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                    Paso 1: Seleccionar Apartados
+                </h2>
+                <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200">
+                    <h3 className="font-bold flex items-center gap-2">
+                        ⚠️ No se encontraron apartados
+                    </h3>
+                    <p className="mt-2 text-sm">
+                        Este catálogo ({selectedCatalog}) parece no tener la estructura estándar o está vacío.
+                    </p>
+                    <p className="mt-2 text-sm">
+                        Por favor intenta seleccionar otro catálogo (ej. SIS_2024, SIS_2025).
+                    </p>
+                </div>
             </div>
         );
     }

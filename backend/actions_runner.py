@@ -127,18 +127,34 @@ def get_apartados(catalog: str) -> dict:
         
         # Look for "VARIABLES"
         var_dim = next((d for d in dims if "VARIABLES" in d.upper()), None)
+        
+        # Fallback 1: Look for "INDICADORES"
         if not var_dim:
-            # Fallback: take user param or default
+            var_dim = next((d for d in dims if "INDICADORES" in d.upper()), None)
+            
+        # Fallback 2: Take user param or default
+        if not var_dim:
             var_dim = PARAMS.get("dimension", "[DIM VARIABLES]")
         
         logger.info(f"Using dimension for Apartados: {var_dim}")
         
         # Get Members directly from schema - SAFER/FASTER than MDX on large cubes
-        # Filter where LEVEL_NUMBER > 0 to skip (All)
-        cursor.execute(f"SELECT [MEMBER_UNIQUE_NAME], [MEMBER_CAPTION] FROM $system.MDSchema_Members WHERE [CUBE_NAME]='{main_cube}' AND [DIMENSION_UNIQUE_NAME]='{var_dim}' AND [LEVEL_NUMBER]=1")
+        # MODIFIED: Do NOT filter by Level=1 strictly. Get L1, L2, L3 and sort.
+        # Some cubes (DEFUNCIONES_2024) have mixed structures.
+        query = f"SELECT [MEMBER_UNIQUE_NAME], [MEMBER_CAPTION], [LEVEL_NUMBER] FROM $system.MDSchema_Members WHERE [CUBE_NAME]='{main_cube}' AND [DIMENSION_UNIQUE_NAME]='{var_dim}' AND [LEVEL_NUMBER] > 0 ORDER BY [LEVEL_NUMBER] ASC"
+        
+        cursor.execute(query)
         rows = cursor.fetchall()
         
-        members = rows_to_list(cursor, rows)
+        # Helper to convert Row to dict
+        members = []
+        if rows:
+            columns = [column[0] for column in cursor.description]
+            for row in rows:
+                members.append(dict(zip(columns, row)))
+        
+        # If empty at >0 (unlikely for valid dim), try Level 0 (All) children potentially?
+        # But usually Level > 0 catch actual members. 
         
         return {
             "dimension": var_dim,
