@@ -9,11 +9,10 @@ on:
         type: choice
         options:
           - get_catalogs
+          - discover_structure
           - get_apartados
-          - get_variables
-          - get_dimensions
-          - get_members
           - execute_query
+          - execute_mdx
       catalog:
         description: 'Catalog name (e.g., SIS_2025)'
         required: false

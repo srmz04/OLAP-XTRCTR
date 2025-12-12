@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Actions Runner - Executes OLAP queries in GitHub Actions environment
-Uses same connection pattern as working DGIS_SCAN_2_stable.py
+Actions Runner - DGIS-specific MDX syntax
+Based on validated patterns from Juan Santos blog (2022)
+DGIS uses NON-STANDARD syntax: [$DIMENSION.field]="Value"
 """
 
 import os
@@ -13,7 +14,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Environment variables from GitHub Actions
+# Environment variables
 ACTION = os.environ.get('ACTION', 'get_catalogs')
 CATALOG = os.environ.get('CATALOG', '')
 PARAMS = json.loads(os.environ.get('PARAMS', '{}'))
@@ -23,7 +24,6 @@ DGIS_SERVER = os.environ.get('DGIS_SERVER')
 DGIS_USER = os.environ.get('DGIS_USER')
 DGIS_PASSWORD = os.environ.get('DGIS_PASSWORD')
 
-# Import adodbapi
 try:
     import adodbapi
 except ImportError as e:
@@ -32,7 +32,7 @@ except ImportError as e:
 
 
 def get_connection(catalog: str = None):
-    """Create MSOLAP connection using same pattern as working scanner"""
+    """Create MSOLAP connection - same as Juan Santos validated pattern"""
     conn_str = (
         "Provider=MSOLAP;"
         f"Data Source={DGIS_SERVER};"
@@ -59,215 +59,105 @@ def rows_to_list(cursor, rows) -> list:
 
 
 def get_catalogs() -> dict:
-    """Get list of available catalogs using $system.DBSCHEMA_CATALOGS"""
-    logger.info("Fetching catalogs from $system.DBSCHEMA_CATALOGS...")
+    """Get list of available catalogs"""
+    logger.info("Fetching catalogs...")
     
     conn = get_connection()
     cursor = conn.cursor()
     
-    cursor.execute("SELECT * FROM $system.DBSCHEMA_CATALOGS")
+    # Validated DGIS query
+    cursor.execute("SELECT [catalog_name] FROM $system.DBSCHEMA_CATALOGS")
     rows = cursor.fetchall()
     catalogs = rows_to_list(cursor, rows)
     
     cursor.close()
     conn.close()
     
-    # Transform to simpler format
     result = []
     for cat in catalogs:
-        result.append({
-            "name": cat.get("CATALOG_NAME", ""),
-            "description": cat.get("DESCRIPTION", ""),
-            "created": ""
-        })
+        name = cat.get("catalog_name", "")
+        if name and not name.startswith("$"):
+            result.append({"name": name, "description": "", "created": ""})
     
     return {"catalogs": result}
 
 
+def discover_cube_structure(catalog: str) -> dict:
+    """Discover dimensions and fields in a cube - DGIS style"""
+    logger.info(f"Discovering structure for {catalog}...")
+    
+    conn = get_connection(catalog)
+    cursor = conn.cursor()
+    
+    # Get cubes - main cube doesn't start with $
+    cursor.execute("""
+        SELECT CUBE_NAME AS cube, DIMENSION_CAPTION AS dimension
+        FROM $system.MDSchema_Dimensions
+    """)
+    rows = cursor.fetchall()
+    dimensions = rows_to_list(cursor, rows)
+    
+    # Find main cube (no $ prefix)
+    main_cubes = [d for d in dimensions if not d.get('cube', '').startswith('$')]
+    main_cube = main_cubes[0]['cube'] if main_cubes else catalog
+    
+    cursor.close()
+    conn.close()
+    
+    return {
+        "catalog": catalog,
+        "main_cube": main_cube,
+        "dimensions": [d for d in dimensions if d.get('cube') == main_cube]
+    }
+
+
 def get_apartados(catalog: str) -> dict:
-    """Get apartados from a catalog via MDX query"""
+    """Get apartados using DGIS field discovery"""
     logger.info(f"Fetching apartados from {catalog}...")
     
+    # First discover structure
+    structure = discover_cube_structure(catalog)
+    main_cube = structure.get("main_cube", catalog)
+    
     conn = get_connection(catalog)
     cursor = conn.cursor()
-    
-    # First try to find the Apartado dimension
-    mdx = f"""
-    SELECT 
-        {{}} ON COLUMNS,
-        [Apartado].[Apartado].MEMBERS ON ROWS
-    FROM [{catalog}]
-    """
     
     try:
-        cursor.execute(mdx)
-        rows = cursor.fetchall()
-        apartados = rows_to_list(cursor, rows)
+        # Try to get sample data to discover field names
+        # DGIS style: SELECT field FROM [CUBE].[Measures]
+        cursor.execute(f"SELECT * FROM [{main_cube}].[Measures]")
+        rows = cursor.fetchmany(10)  # Just get 10 rows to discover columns
         
-        result = []
-        for i, apt in enumerate(apartados):
-            first_col = list(apt.keys())[0] if apt else ""
-            val = apt.get(first_col, "")
-            if val and "All" not in str(val):
-                result.append({
-                    "id": str(i),
-                    "name": str(val).split('.')[-1].strip('[]&'),
-                    "uniqueName": str(val),
-                    "hierarchy": "Apartado"
-                })
+        if rows and cursor.description:
+            cols = [c[0] for c in cursor.description]
+            # Look for apartado column
+            apartado_cols = [c for c in cols if 'apartado' in c.lower()]
+            logger.info(f"Found columns: {cols[:5]}... (showing first 5)")
+            logger.info(f"Apartado columns: {apartado_cols}")
         
         cursor.close()
         conn.close()
-        return {"apartados": result}
-    except Exception as e:
-        logger.warning(f"Apartado query failed: {e}, trying measures...")
-        cursor.close()
-        conn.close()
         
-        # Fallback: return measures as apartados
-        return {"apartados": [], "error": str(e)}
-
-
-def get_variables(catalog: str, apartados: list = None) -> dict:
-    """Get measures from a catalog"""
-    logger.info(f"Fetching variables/measures from {catalog}...")
-    
-    conn = get_connection(catalog)
-    cursor = conn.cursor()
-    
-    # Query measures from system schema
-    cursor.execute(f"SELECT MEASURE_NAME, MEASURE_UNIQUE_NAME, MEASURE_CAPTION FROM $system.MDSCHEMA_MEASURES WHERE CATALOG_NAME = '{catalog}'")
-    rows = cursor.fetchall()
-    measures = rows_to_list(cursor, rows)
-    
-    cursor.close()
-    conn.close()
-    
-    result = []
-    for i, m in enumerate(measures):
-        result.append({
-            "id": str(i),
-            "name": m.get("MEASURE_NAME") or m.get("MEASURE_CAPTION", ""),
-            "uniqueName": m.get("MEASURE_UNIQUE_NAME", ""),
-            "apartado": "General",
-            "hierarchy": "Measures"
-        })
-    
-    return {"variables": result}
-
-
-def get_dimensions(catalog: str) -> dict:
-    """Get dimensions from a catalog using MDSCHEMA_DIMENSIONS"""
-    logger.info(f"Fetching dimensions from {catalog}...")
-    
-    conn = get_connection(catalog)
-    cursor = conn.cursor()
-    
-    cursor.execute(f"SELECT DIMENSION_NAME, DIMENSION_UNIQUE_NAME, DIMENSION_CAPTION FROM $system.MDSCHEMA_DIMENSIONS WHERE CATALOG_NAME = '{catalog}'")
-    rows = cursor.fetchall()
-    dims = rows_to_list(cursor, rows)
-    
-    cursor.close()
-    conn.close()
-    
-    result = []
-    for d in dims:
-        name = d.get("DIMENSION_NAME", "")
-        if name and not name.startswith('$'):
-            result.append({
-                "dimension": name,
-                "hierarchy": name,
-                "displayName": d.get("DIMENSION_CAPTION") or name,
-                "levels": [{"name": "All", "depth": 0}, {"name": name, "depth": 1}]
-            })
-    
-    return {"dimensions": result}
-
-
-def get_members(catalog: str, dimension: str, hierarchy: str, level: str) -> dict:
-    """Get members of a dimension hierarchy"""
-    logger.info(f"Fetching members for {dimension}.{hierarchy}...")
-    
-    conn = get_connection(catalog)
-    cursor = conn.cursor()
-    
-    mdx = f"""
-    SELECT 
-        {{}} ON COLUMNS,
-        [{dimension}].[{hierarchy}].MEMBERS ON ROWS
-    FROM [{catalog}]
-    """
-    
-    try:
-        cursor.execute(mdx)
-        rows = cursor.fetchall()
-        members_raw = rows_to_list(cursor, rows)
-        
-        result = []
-        for m in members_raw:
-            first_col = list(m.keys())[0] if m else ""
-            val = m.get(first_col, "")
-            if val:
-                result.append({
-                    "caption": str(val).split('.')[-1].strip('[]&'),
-                    "uniqueName": str(val)
-                })
-        
-        cursor.close()
-        conn.close()
-        return {"members": result}
+        return {
+            "structure": structure,
+            "columns_sample": cols[:10] if rows else [],
+            "apartados": []  # Need more analysis
+        }
     except Exception as e:
         cursor.close()
         conn.close()
-        return {"members": [], "error": str(e)}
+        return {"error": str(e), "structure": structure}
 
 
-def execute_query(catalog: str, params: dict) -> dict:
-    """Execute MDX query with given parameters"""
-    logger.info(f"Executing query on {catalog}...")
-    
-    variables = params.get('variables', [])
-    rows_dims = params.get('rows', [])
-    filters = params.get('filters', [])
-    
-    # Build measures set
-    if variables:
-        measures = ', '.join([v.get('uniqueName', f"[Measures].[{v['name']}]") for v in variables])
-    else:
-        measures = '[Measures].MEMBERS'
-    
-    # Build rows axis
-    if rows_dims:
-        row_parts = []
-        for r in rows_dims:
-            dim = r.get('dimension', '')
-            hier = r.get('hierarchy', dim)
-            row_parts.append(f"[{dim}].[{hier}].MEMBERS")
-        row_axis = 'NON EMPTY ' + ' * '.join(row_parts)
-    else:
-        row_axis = 'NON EMPTY [Apartado].[Apartado].MEMBERS'
-    
-    mdx = f"""
-    SELECT 
-        NON EMPTY {{{measures}}} ON COLUMNS,
-        {row_axis} ON ROWS
-    FROM [{catalog}]
-    """
-    
-    # Add WHERE clause for filters
-    if filters:
-        filter_members = []
-        for f in filters:
-            if f.get('members'):
-                filter_members.extend(f['members'])
-        if filter_members:
-            mdx += f" WHERE ({', '.join(filter_members)})"
-    
+def execute_mdx(catalog: str, mdx: str) -> dict:
+    """Execute raw MDX query - DGIS syntax"""
+    logger.info(f"Executing MDX on {catalog}...")
     logger.info(f"MDX: {mdx[:200]}...")
     
+    conn = get_connection(catalog)
+    cursor = conn.cursor()
+    
     try:
-        conn = get_connection(catalog)
-        cursor = conn.cursor()
         cursor.execute(mdx)
         rows = cursor.fetchall()
         data = rows_to_list(cursor, rows)
@@ -284,12 +174,62 @@ def execute_query(catalog: str, params: dict) -> dict:
             "mdx": mdx
         }
     except Exception as e:
-        logger.error(f"Query failed: {e}")
+        cursor.close()
+        conn.close()
         return {"rows": [], "columns": [], "rowCount": 0, "error": str(e), "mdx": mdx}
 
 
+def build_dgis_query(catalog: str, params: dict) -> str:
+    """
+    Build DGIS-style MDX query
+    
+    DGIS Syntax: SELECT [$DIM.field] FROM [CUBE].[Measures] WHERE [$DIM.field]="Value"
+    NOT SSAS: [Dimension].[Hierarchy].[Level].&[Key]
+    """
+    main_cube = params.get('cube', catalog)
+    
+    # Columns to select
+    select_fields = params.get('select', ['*'])
+    if select_fields == ['*']:
+        select_clause = '*'
+    else:
+        select_clause = ', '.join(select_fields)
+    
+    # WHERE filters - DGIS style: [$DIM.field]="Value"
+    filters = params.get('filters', [])
+    where_parts = []
+    for f in filters:
+        dim = f.get('dimension', '')
+        field = f.get('field', '')
+        value = f.get('value', '')
+        if dim and field and value:
+            # DGIS format: [$dimension.field]="value"
+            where_parts.append(f'[${dim}.{field}]="{value}"')
+    
+    where_clause = ' AND '.join(where_parts) if where_parts else ''
+    
+    mdx = f"SELECT {select_clause} FROM [{main_cube}].[Measures]"
+    if where_clause:
+        mdx += f" WHERE {where_clause}"
+    
+    return mdx
+
+
+def execute_query(catalog: str, params: dict) -> dict:
+    """Execute query with DGIS syntax builder"""
+    
+    # Check for raw MDX first
+    raw_mdx = params.get('mdx')
+    if raw_mdx:
+        return execute_mdx(catalog, raw_mdx)
+    
+    # Build DGIS-style query
+    mdx = build_dgis_query(catalog, params)
+    return execute_mdx(catalog, mdx)
+
+
 def main():
-    logger.info(f"=== Actions Runner ===")
+    logger.info("=== Actions Runner (DGIS Syntax) ===")
     logger.info(f"Action: {ACTION}")
     logger.info(f"Catalog: {CATALOG}")
     logger.info(f"Request ID: {REQUEST_ID}")
@@ -299,22 +239,20 @@ def main():
     try:
         if ACTION == 'get_catalogs':
             result["data"] = get_catalogs()
+        
+        elif ACTION == 'discover_structure':
+            result["data"] = discover_cube_structure(CATALOG)
+        
         elif ACTION == 'get_apartados':
             result["data"] = get_apartados(CATALOG)
-        elif ACTION == 'get_variables':
-            apartados = PARAMS.get('apartados', [])
-            result["data"] = get_variables(CATALOG, apartados)
-        elif ACTION == 'get_dimensions':
-            result["data"] = get_dimensions(CATALOG)
-        elif ACTION == 'get_members':
-            result["data"] = get_members(
-                CATALOG,
-                PARAMS.get('dimension', ''),
-                PARAMS.get('hierarchy', ''),
-                PARAMS.get('level', '')
-            )
+        
         elif ACTION == 'execute_query':
             result["data"] = execute_query(CATALOG, PARAMS)
+        
+        elif ACTION == 'execute_mdx':
+            mdx = PARAMS.get('mdx', '')
+            result["data"] = execute_mdx(CATALOG, mdx)
+        
         else:
             result["status"] = "error"
             result["error"] = f"Unknown action: {ACTION}"
@@ -324,7 +262,7 @@ def main():
         result["status"] = "error"
         result["error"] = str(e)
     
-    # Write result to file
+    # Write result
     with open('result.json', 'w', encoding='utf-8') as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
     
