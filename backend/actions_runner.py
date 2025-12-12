@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Actions Runner - Executes OLAP queries in GitHub Actions environment
-Outputs result to result.json for Gist upload
+Uses same connection pattern as working DGIS_SCAN_2_stable.py
 """
 
 import os
@@ -13,7 +13,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Get environment variables
+# Environment variables from GitHub Actions
 ACTION = os.environ.get('ACTION', 'get_catalogs')
 CATALOG = os.environ.get('CATALOG', '')
 PARAMS = json.loads(os.environ.get('PARAMS', '{}'))
@@ -23,65 +23,75 @@ DGIS_SERVER = os.environ.get('DGIS_SERVER')
 DGIS_USER = os.environ.get('DGIS_USER')
 DGIS_PASSWORD = os.environ.get('DGIS_PASSWORD')
 
-def get_connection_string(catalog: str = None) -> str:
-    """Build OLEDB connection string for SSAS"""
+# Import adodbapi
+try:
+    import adodbapi
+except ImportError as e:
+    logger.critical(f"Failed to import adodbapi: {e}")
+    sys.exit(1)
+
+
+def get_connection(catalog: str = None):
+    """Create MSOLAP connection using same pattern as working scanner"""
     conn_str = (
-        f"Provider=MSOLAP;"
+        "Provider=MSOLAP;"
         f"Data Source={DGIS_SERVER};"
+        "Persist Security Info=True;"
         f"User ID={DGIS_USER};"
         f"Password={DGIS_PASSWORD};"
     )
     if catalog:
         conn_str += f"Initial Catalog={catalog};"
-    return conn_str
+    
+    return adodbapi.connect(conn_str, timeout=60)
 
-def execute_mdx(catalog: str, mdx: str) -> list:
-    """Execute MDX query and return results as list of dicts"""
-    import adodbapi
+
+def rows_to_list(cursor, rows) -> list:
+    """Convert cursor rows to list of dicts"""
+    if rows is None or len(rows) == 0:
+        return []
     
-    conn_str = get_connection_string(catalog)
-    logger.info(f"Connecting to SSAS...")
+    cols = [c[0] for c in cursor.description] if cursor.description else []
+    result = []
+    for row in rows:
+        result.append({cols[i]: (str(v) if v is not None else None) for i, v in enumerate(row)})
+    return result
+
+
+def get_catalogs() -> dict:
+    """Get list of available catalogs using $system.DBSCHEMA_CATALOGS"""
+    logger.info("Fetching catalogs from $system.DBSCHEMA_CATALOGS...")
     
-    conn = adodbapi.connect(conn_str)
+    conn = get_connection()
     cursor = conn.cursor()
     
-    logger.info(f"Executing MDX: {mdx[:100]}...")
-    cursor.execute(mdx)
-    
-    columns = [desc[0] for desc in cursor.description]
-    rows = []
-    for row in cursor.fetchall():
-        rows.append(dict(zip(columns, [str(v) if v is not None else None for v in row])))
+    cursor.execute("SELECT * FROM $system.DBSCHEMA_CATALOGS")
+    rows = cursor.fetchall()
+    catalogs = rows_to_list(cursor, rows)
     
     cursor.close()
     conn.close()
     
-    return rows
-
-def get_catalogs() -> dict:
-    """Get list of available catalogs"""
-    import adodbapi
-    
-    conn_str = get_connection_string()
-    conn = adodbapi.connect(conn_str)
-    
-    # Use DISCOVER_CATALOGS schema rowset
-    schema = conn.GetSchemaRowset("{C8B52211-5CF3-11CE-ADE5-00AA0044773D}")
-    
-    catalogs = []
-    for row in schema:
-        catalogs.append({
-            "name": row.CATALOG_NAME,
-            "description": getattr(row, 'DESCRIPTION', ''),
-            "created": str(getattr(row, 'DATE_MODIFIED', ''))
+    # Transform to simpler format
+    result = []
+    for cat in catalogs:
+        result.append({
+            "name": cat.get("CATALOG_NAME", ""),
+            "description": cat.get("DESCRIPTION", ""),
+            "created": ""
         })
     
-    conn.close()
-    return {"catalogs": catalogs}
+    return {"catalogs": result}
+
 
 def get_apartados(catalog: str) -> dict:
-    """Get apartados (data categories) from catalog"""
-    # Query the Apartado dimension
+    """Get apartados from a catalog via MDX query"""
+    logger.info(f"Fetching apartados from {catalog}...")
+    
+    conn = get_connection(catalog)
+    cursor = conn.cursor()
+    
+    # First try to find the Apartado dimension
     mdx = f"""
     SELECT 
         {{}} ON COLUMNS,
@@ -90,83 +100,97 @@ def get_apartados(catalog: str) -> dict:
     """
     
     try:
-        rows = execute_mdx(catalog, mdx)
-        apartados = []
-        for row in rows:
-            member_key = list(row.keys())[0]
-            member_val = row[member_key]
-            if member_val and 'All' not in member_val:
-                # Extract ID from member name (e.g., "[Apartado].[Apartado].&[119]" -> "119")
-                import re
-                match = re.search(r'\[(\d+)\]$', member_val)
-                if match:
-                    apartados.append({
-                        "id": match.group(1),
-                        "name": member_val.split('.')[-1].strip('[]&'),
-                        "uniqueName": member_val,
-                        "hierarchy": "Apartado"
-                    })
-        return {"apartados": apartados}
+        cursor.execute(mdx)
+        rows = cursor.fetchall()
+        apartados = rows_to_list(cursor, rows)
+        
+        result = []
+        for i, apt in enumerate(apartados):
+            first_col = list(apt.keys())[0] if apt else ""
+            val = apt.get(first_col, "")
+            if val and "All" not in str(val):
+                result.append({
+                    "id": str(i),
+                    "name": str(val).split('.')[-1].strip('[]&'),
+                    "uniqueName": str(val),
+                    "hierarchy": "Apartado"
+                })
+        
+        cursor.close()
+        conn.close()
+        return {"apartados": result}
     except Exception as e:
-        logger.error(f"Error getting apartados: {e}")
+        logger.warning(f"Apartado query failed: {e}, trying measures...")
+        cursor.close()
+        conn.close()
+        
+        # Fallback: return measures as apartados
         return {"apartados": [], "error": str(e)}
 
-def get_variables(catalog: str, apartados: list = None) -> dict:
-    """Get variables/measures from catalog"""
-    mdx = f"""
-    SELECT 
-        {{}} ON COLUMNS,
-        [Variable].[Variable].MEMBERS ON ROWS
-    FROM [{catalog}]
-    """
-    
-    try:
-        rows = execute_mdx(catalog, mdx)
-        variables = []
-        for i, row in enumerate(rows):
-            member_key = list(row.keys())[0]
-            member_val = row[member_key]
-            if member_val and 'All' not in member_val:
-                variables.append({
-                    "id": str(i),
-                    "name": member_val.split('.')[-1].strip('[]&'),
-                    "uniqueName": member_val,
-                    "apartado": "General",
-                    "hierarchy": "Variable"
-                })
-        return {"variables": variables}
-    except Exception as e:
-        logger.error(f"Error getting variables: {e}")
-        return {"variables": [], "error": str(e)}
 
-def get_dimensions(catalog: str) -> dict:
-    """Get dimensions from catalog"""
-    import adodbapi
+def get_variables(catalog: str, apartados: list = None) -> dict:
+    """Get measures from a catalog"""
+    logger.info(f"Fetching variables/measures from {catalog}...")
     
-    conn_str = get_connection_string(catalog)
-    conn = adodbapi.connect(conn_str)
-    
-    # Query MDSCHEMA_DIMENSIONS
+    conn = get_connection(catalog)
     cursor = conn.cursor()
-    cursor.execute(f"SELECT * FROM $system.MDSCHEMA_DIMENSIONS WHERE CATALOG_NAME = '{catalog}'")
     
-    dimensions = []
-    for row in cursor.fetchall():
-        dim_name = row[2]  # DIMENSION_NAME
-        if dim_name and not dim_name.startswith('$'):
-            dimensions.append({
-                "dimension": dim_name,
-                "hierarchy": dim_name,
-                "displayName": dim_name,
-                "levels": [{"name": "All", "depth": 0}, {"name": dim_name, "depth": 1}]
-            })
+    # Query measures from system schema
+    cursor.execute(f"SELECT MEASURE_NAME, MEASURE_UNIQUE_NAME, MEASURE_CAPTION FROM $system.MDSCHEMA_MEASURES WHERE CATALOG_NAME = '{catalog}'")
+    rows = cursor.fetchall()
+    measures = rows_to_list(cursor, rows)
     
     cursor.close()
     conn.close()
-    return {"dimensions": dimensions}
+    
+    result = []
+    for i, m in enumerate(measures):
+        result.append({
+            "id": str(i),
+            "name": m.get("MEASURE_NAME") or m.get("MEASURE_CAPTION", ""),
+            "uniqueName": m.get("MEASURE_UNIQUE_NAME", ""),
+            "apartado": "General",
+            "hierarchy": "Measures"
+        })
+    
+    return {"variables": result}
+
+
+def get_dimensions(catalog: str) -> dict:
+    """Get dimensions from a catalog using MDSCHEMA_DIMENSIONS"""
+    logger.info(f"Fetching dimensions from {catalog}...")
+    
+    conn = get_connection(catalog)
+    cursor = conn.cursor()
+    
+    cursor.execute(f"SELECT DIMENSION_NAME, DIMENSION_UNIQUE_NAME, DIMENSION_CAPTION FROM $system.MDSCHEMA_DIMENSIONS WHERE CATALOG_NAME = '{catalog}'")
+    rows = cursor.fetchall()
+    dims = rows_to_list(cursor, rows)
+    
+    cursor.close()
+    conn.close()
+    
+    result = []
+    for d in dims:
+        name = d.get("DIMENSION_NAME", "")
+        if name and not name.startswith('$'):
+            result.append({
+                "dimension": name,
+                "hierarchy": name,
+                "displayName": d.get("DIMENSION_CAPTION") or name,
+                "levels": [{"name": "All", "depth": 0}, {"name": name, "depth": 1}]
+            })
+    
+    return {"dimensions": result}
+
 
 def get_members(catalog: str, dimension: str, hierarchy: str, level: str) -> dict:
-    """Get members of a dimension level"""
+    """Get members of a dimension hierarchy"""
+    logger.info(f"Fetching members for {dimension}.{hierarchy}...")
+    
+    conn = get_connection(catalog)
+    cursor = conn.cursor()
+    
     mdx = f"""
     SELECT 
         {{}} ON COLUMNS,
@@ -175,37 +199,53 @@ def get_members(catalog: str, dimension: str, hierarchy: str, level: str) -> dic
     """
     
     try:
-        rows = execute_mdx(catalog, mdx)
-        members = []
-        for row in rows:
-            member_key = list(row.keys())[0]
-            member_val = row[member_key]
-            if member_val:
-                members.append({
-                    "caption": member_val.split('.')[-1].strip('[]&'),
-                    "uniqueName": member_val
+        cursor.execute(mdx)
+        rows = cursor.fetchall()
+        members_raw = rows_to_list(cursor, rows)
+        
+        result = []
+        for m in members_raw:
+            first_col = list(m.keys())[0] if m else ""
+            val = m.get(first_col, "")
+            if val:
+                result.append({
+                    "caption": str(val).split('.')[-1].strip('[]&'),
+                    "uniqueName": str(val)
                 })
-        return {"members": members}
+        
+        cursor.close()
+        conn.close()
+        return {"members": result}
     except Exception as e:
-        logger.error(f"Error getting members: {e}")
+        cursor.close()
+        conn.close()
         return {"members": [], "error": str(e)}
 
+
 def execute_query(catalog: str, params: dict) -> dict:
-    """Execute a full query based on wizard parameters"""
-    # Build MDX from params
+    """Execute MDX query with given parameters"""
+    logger.info(f"Executing query on {catalog}...")
+    
     variables = params.get('variables', [])
     rows_dims = params.get('rows', [])
     filters = params.get('filters', [])
     
-    # Simple MDX construction
-    measures = ', '.join([f"[Measures].[{v['name']}]" for v in variables]) if variables else '[Measures].MEMBERS'
-    
-    row_axis = 'NON EMPTY '
-    if rows_dims:
-        row_sets = [f"[{r['dimension']}].[{r['hierarchy']}].MEMBERS" for r in rows_dims]
-        row_axis += ' * '.join(row_sets)
+    # Build measures set
+    if variables:
+        measures = ', '.join([v.get('uniqueName', f"[Measures].[{v['name']}]") for v in variables])
     else:
-        row_axis += '[Apartado].[Apartado].MEMBERS'
+        measures = '[Measures].MEMBERS'
+    
+    # Build rows axis
+    if rows_dims:
+        row_parts = []
+        for r in rows_dims:
+            dim = r.get('dimension', '')
+            hier = r.get('hierarchy', dim)
+            row_parts.append(f"[{dim}].[{hier}].MEMBERS")
+        row_axis = 'NON EMPTY ' + ' * '.join(row_parts)
+    else:
+        row_axis = 'NON EMPTY [Apartado].[Apartado].MEMBERS'
     
     mdx = f"""
     SELECT 
@@ -223,21 +263,35 @@ def execute_query(catalog: str, params: dict) -> dict:
         if filter_members:
             mdx += f" WHERE ({', '.join(filter_members)})"
     
+    logger.info(f"MDX: {mdx[:200]}...")
+    
     try:
-        rows = execute_mdx(catalog, mdx)
-        columns = list(rows[0].keys()) if rows else []
+        conn = get_connection(catalog)
+        cursor = conn.cursor()
+        cursor.execute(mdx)
+        rows = cursor.fetchall()
+        data = rows_to_list(cursor, rows)
+        
+        columns = list(data[0].keys()) if data else []
+        
+        cursor.close()
+        conn.close()
+        
         return {
-            "rows": rows,
+            "rows": data,
             "columns": [{"field": c, "headerName": c} for c in columns],
-            "rowCount": len(rows),
+            "rowCount": len(data),
             "mdx": mdx
         }
     except Exception as e:
-        logger.error(f"Error executing query: {e}")
+        logger.error(f"Query failed: {e}")
         return {"rows": [], "columns": [], "rowCount": 0, "error": str(e), "mdx": mdx}
 
+
 def main():
-    logger.info(f"Starting action: {ACTION} for catalog: {CATALOG}")
+    logger.info(f"=== Actions Runner ===")
+    logger.info(f"Action: {ACTION}")
+    logger.info(f"Catalog: {CATALOG}")
     logger.info(f"Request ID: {REQUEST_ID}")
     
     result = {"request_id": REQUEST_ID, "action": ACTION, "status": "success"}
@@ -264,6 +318,7 @@ def main():
         else:
             result["status"] = "error"
             result["error"] = f"Unknown action: {ACTION}"
+            
     except Exception as e:
         logger.error(f"Action failed: {e}")
         result["status"] = "error"
@@ -274,9 +329,11 @@ def main():
         json.dump(result, f, ensure_ascii=False, indent=2)
     
     logger.info(f"Result written to result.json")
+    logger.info(f"Status: {result['status']}")
     
     if result["status"] == "error":
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

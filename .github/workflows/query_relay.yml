@@ -39,7 +39,15 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
 
+      - name: Cache OLEDB Installer
+        id: cache-oledb
+        uses: actions/cache@v4
+        with:
+          path: SQL_AS_OLEDB.msi
+          key: oledb-installer-v1
+
       - name: Download OLEDB Provider
+        if: steps.cache-oledb.outputs.cache-hit != 'true'
         shell: powershell
         run: |
           $url = "https://go.microsoft.com/fwlink/?linkid=829576"
