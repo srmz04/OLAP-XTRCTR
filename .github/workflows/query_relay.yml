@@ -1,0 +1,97 @@
+name: OLAP Query Relay
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - get_catalogs
+          - get_apartados
+          - get_variables
+          - get_dimensions
+          - get_members
+          - execute_query
+      catalog:
+        description: 'Catalog name (e.g., SIS_2025)'
+        required: false
+        default: ''
+      params:
+        description: 'JSON params for the action'
+        required: false
+        default: '{}'
+      request_id:
+        description: 'Unique request ID for result tracking'
+        required: true
+
+jobs:
+  query:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install setuptools for adodbapi
+        run: pip install setuptools==57.5.0
+
+      - name: Download and install adodbapi
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/mhammond/pywin32/releases/download/b306/pywin32-306.win-amd64-py3.10.exe" -OutFile "pywin32.exe"
+          Start-Process -Wait -FilePath "pywin32.exe" -ArgumentList "/S"
+          pip install pywin32
+          Invoke-WebRequest -Uri "https://sourceforge.net/projects/adodbapi/files/adodbapi/2.6.2.0/adodbapi-2.6.2.0.zip/download" -OutFile "adodbapi.zip"
+          Expand-Archive -Path "adodbapi.zip" -DestinationPath "adodbapi_src"
+          cd adodbapi_src/adodbapi-2.6.2.0
+          python setup.py install
+        shell: powershell
+
+      - name: Install OLEDB Driver
+        run: |
+          $url = "https://go.microsoft.com/fwlink/?linkid=829576"
+          Invoke-WebRequest -Uri $url -OutFile "msolap.msi"
+          Start-Process msiexec.exe -Wait -ArgumentList '/i msolap.msi /quiet /qn /norestart IACCEPTMSOLABORSLICENSETERMS=YES'
+        shell: powershell
+
+      - name: Install Python dependencies
+        run: pip install pandas
+
+      - name: Execute Query
+        id: query
+        env:
+          DGIS_SERVER: ${{ secrets.DGIS_SERVER }}
+          DGIS_USER: ${{ secrets.DGIS_USER }}
+          DGIS_PASSWORD: ${{ secrets.DGIS_PASSWORD }}
+          ACTION: ${{ inputs.action }}
+          CATALOG: ${{ inputs.catalog }}
+          PARAMS: ${{ inputs.params }}
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: python backend/actions_runner.py
+
+      - name: Upload result to Gist
+        uses: actions/github-script@v7
+        env:
+          RESULT_FILE: result.json
+          REQUEST_ID: ${{ inputs.request_id }}
+        with:
+          github-token: ${{ secrets.GIST_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const result = fs.readFileSync('result.json', 'utf8');
+            const gistId = '${{ secrets.GIST_ID }}';
+            
+            await github.rest.gists.update({
+              gist_id: gistId,
+              files: {
+                [`${process.env.REQUEST_ID}.json`]: {
+                  content: result
+                }
+              }
+            });
+            console.log(`Result uploaded to gist for request ${process.env.REQUEST_ID}`);

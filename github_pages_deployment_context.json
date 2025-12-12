@@ -1,0 +1,151 @@
+{
+    "project": "OLAP XTRCTR - GitHub Pages Deployment",
+    "created": "2025-12-11T21:52:00-06:00",
+    "context": {
+        "current_state": {
+            "frontend": "React/Vite app in /frontend with CatalogSelector, Wizard (4 steps), Zustand stores",
+            "backend": "FastAPI in /backend with OlapService, MockOlapService fallback",
+            "infrastructure": "GitHub Actions workflow (olap_test.yml) configured for Windows runner with SSAS connectivity",
+            "blockers": [
+                "Local Linux testing fails due to MockOlapService incomplete implementation",
+                "Frontend hardcoded IPs have been fixed but backend mock data is insufficient",
+                "No production deployment exists - everything runs locally"
+            ]
+        },
+        "dgis_server": {
+            "type": "SQL Server Analysis Services (SSAS) OLAP Cube",
+            "connection": "OLEDB via adodbapi on Windows",
+            "credentials": "Stored as GitHub Secrets (DGIS_SERVER, DGIS_USER, DGIS_PASSWORD)",
+            "catalogs": [
+                "SIS_2025",
+                "others..."
+            ]
+        }
+    },
+    "user_need": {
+        "primary": "Deploy frontend on GitHub Pages that connects to a LIVE backend API running on a Windows environment with real DGIS SSAS access",
+        "reasons": [
+            "Local Linux testing is irrelevant - actual OLAP connectivity requires Windows + COM",
+            "MockOlapService is incomplete and wastes development time",
+            "GitHub Pages provides free, reliable static hosting for the React frontend",
+            "GitHub Actions Windows runner can deploy/run backend with real SSAS access"
+        ],
+        "acceptance_criteria": [
+            "Frontend accessible at https://username.github.io/olap-xtrctr/",
+            "Frontend calls a backend API that has LIVE DGIS connectivity",
+            "All Wizard steps work with REAL data (apartados, variables, dimensions, members)",
+            "No more mock/simulation fallbacks"
+        ]
+    },
+    "proposed_solution": {
+        "architecture": {
+            "frontend": {
+                "hosting": "GitHub Pages (static site)",
+                "build": "Vite production build",
+                "deployment": "GitHub Actions workflow on push to main"
+            },
+            "backend": {
+                "option_a": {
+                    "name": "Self-Hosted Windows Server (Recommended)",
+                    "description": "Deploy FastAPI on a Windows VPS/Server with SSAS access",
+                    "pros": [
+                        "Always-on API",
+                        "Real SSAS connectivity",
+                        "Full control"
+                    ],
+                    "cons": [
+                        "Requires server cost/maintenance",
+                        "Need to configure HTTPS/Domain"
+                    ]
+                },
+                "option_b": {
+                    "name": "Azure Functions (Serverless)",
+                    "description": "Deploy FastAPI endpoints as Azure Functions with VNet to SSAS",
+                    "pros": [
+                        "Pay-per-use",
+                        "Scales automatically",
+                        "Azure integrates with SSAS"
+                    ],
+                    "cons": [
+                        "Cold start latency",
+                        "More complex setup",
+                        "Azure costs"
+                    ]
+                },
+                "option_c": {
+                    "name": "GitHub Actions API Relay (Hackathon Style)",
+                    "description": "Use GitHub Actions as a 'serverless' backend - frontend triggers workflow dispatches, results stored in artifacts/gists",
+                    "pros": [
+                        "Free",
+                        "Uses existing Windows runner with SSAS access"
+                    ],
+                    "cons": [
+                        "High latency (minutes)",
+                        "Not real-time",
+                        "Complex polling logic"
+                    ]
+                }
+            }
+        },
+        "recommended_path": {
+            "phase_1": "Deploy Frontend to GitHub Pages immediately",
+            "phase_2": "Backend: If you have a Windows server/VM with SSAS access, deploy FastAPI there. Otherwise, use Option C as MVP.",
+            "phase_3": "Configure CORS and HTTPS on backend",
+            "phase_4": "Update frontend VITE_API_URL to point to production backend"
+        }
+    },
+    "implementation_steps": [
+        {
+            "step": 1,
+            "task": "Create GitHub Pages deployment workflow",
+            "file": ".github/workflows/deploy_pages.yml",
+            "actions": [
+                "Build Vite",
+                "Deploy to gh-pages branch",
+                "Configure base URL"
+            ]
+        },
+        {
+            "step": 2,
+            "task": "Configure vite.config.ts for GitHub Pages",
+            "actions": [
+                "Set base path to repo name",
+                "Ensure assets load correctly"
+            ]
+        },
+        {
+            "step": 3,
+            "task": "Create production .env.production",
+            "actions": [
+                "Set VITE_API_URL to production backend URL"
+            ]
+        },
+        {
+            "step": 4,
+            "task": "Backend deployment (depends on chosen option)",
+            "actions": [
+                "Deploy to Windows server OR set up Azure Functions OR implement Action Relay"
+            ]
+        },
+        {
+            "step": 5,
+            "task": "Configure CORS on production backend",
+            "actions": [
+                "Allow requests from github.io domain"
+            ]
+        },
+        {
+            "step": 6,
+            "task": "End-to-end testing",
+            "actions": [
+                "Verify all Wizard steps work with real DGIS data"
+            ]
+        }
+    ],
+    "questions_for_user": [
+        "Do you have a Windows server/VM available to host the backend API?",
+        "If not, are you open to using Azure (paid) or the GitHub Actions relay (free but slow)?",
+        "What is your GitHub username/org for the Pages URL?",
+        "Is the DGIS server accessible from public internet or only from specific networks?"
+    ]
+}

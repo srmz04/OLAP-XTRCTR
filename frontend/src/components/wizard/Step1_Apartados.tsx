@@ -2,8 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useWizardStore } from '../../stores/wizardStore';
 
-// Get BASE_URL from environment
-const BASE_URL = 'http://192.168.1.3:8000';
+import { catalogService } from '../../api/services/catalogService';
 
 interface Apartado {
     id: string;
@@ -20,10 +19,7 @@ export const Step1_Apartados: React.FC = () => {
     // Fetch apartados from API
     const { data: apartados, isLoading } = useQuery<Apartado[]>({
         queryKey: ['apartados', selectedCatalog],
-        queryFn: async () => {
-            const response = await fetch(`${BASE_URL}/api/catalogs/${selectedCatalog}/apartados`);
-            return response.json();
-        },
+        queryFn: () => catalogService.getApartados(selectedCatalog),
         enabled: !!selectedCatalog,
     });
 

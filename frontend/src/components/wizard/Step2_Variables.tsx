@@ -2,8 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useWizardStore } from '../../stores/wizardStore';
 
-// Get BASE_URL from environment
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { catalogService } from '../../api/services/catalogService';
 
 interface Variable {
     id: string;
@@ -19,19 +18,9 @@ export const Step2_Variables: React.FC = () => {
     const [rangeInput, setRangeInput] = useState('');
 
     // Fetch variables filtered by selected apartados
-    const apartadosQuery = selectedApartadoIds.join(',');
-
     const { data: variables, isLoading } = useQuery<Variable[]>({
-        queryKey: ['variables', selectedCatalog, apartadosQuery],
-        queryFn: async () => {
-            // If no apartados selected, fetch all (or handle empty)
-            const url = selectedApartadoIds.length > 0
-                ? `${BASE_URL}/api/catalogs/${selectedCatalog}/variables?apartados=${apartadosQuery}`
-                : `${BASE_URL}/api/catalogs/${selectedCatalog}/variables`;
-
-            const response = await fetch(url);
-            return response.json();
-        },
+        queryKey: ['variables', selectedCatalog, selectedApartadoIds.join(',')],
+        queryFn: () => catalogService.getVariables(selectedCatalog, selectedApartadoIds),
         enabled: !!selectedCatalog,
     });
 

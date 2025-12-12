@@ -1,9 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useWizardStore, DimensionConfig, FilterConfig } from '../../stores/wizardStore';
-
-// Get BASE_URL from environment
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { catalogService } from '../../api/services/catalogService';
 
 interface Dimension {
   dimension: string;
@@ -30,15 +28,7 @@ const MemberSelectorModal: React.FC<{
   // Fetch members for this dimension/hierarchy
   const { data: members, isLoading } = useQuery<Member[]>({
     queryKey: ['members', catalog, filter.dimension, filter.hierarchy, filter.level],
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        dimension: filter.dimension,
-        hierarchy: filter.hierarchy,
-        level: filter.level // Use the level from filter config
-      });
-      const response = await fetch(`${BASE_URL}/api/catalogs/${catalog}/members?${params}`);
-      return response.json();
-    },
+    queryFn: () => catalogService.getMembers(catalog, filter.dimension, filter.hierarchy, filter.level),
   });
 
   const filteredMembers = useMemo(() => {
@@ -174,10 +164,7 @@ export const Step3_Dimensions: React.FC = () => {
   // Fetch dimensions
   const { data: dimensions, isLoading } = useQuery<Dimension[]>({
     queryKey: ['dimensions', selectedCatalog],
-    queryFn: async () => {
-      const response = await fetch(`${BASE_URL}/api/catalogs/${selectedCatalog}/dimensions`);
-      return response.json();
-    },
+    queryFn: () => catalogService.getDimensions(selectedCatalog),
     enabled: !!selectedCatalog,
   });
 

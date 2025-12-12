@@ -2,8 +2,7 @@ import React from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useWizardStore } from '../../stores/wizardStore';
 
-// Get BASE_URL from environment
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { catalogService } from '../../api/services/catalogService';
 
 export const Step4_Preview: React.FC = () => {
     const {
@@ -32,17 +31,7 @@ export const Step4_Preview: React.FC = () => {
                 }))
             };
 
-            const response = await fetch(`${BASE_URL}/api/query/execute`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                throw new Error('Error executing query');
-            }
-
-            return response.json();
+            return await catalogService.executeQuery(payload);
         },
     });
 
