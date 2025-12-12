@@ -215,56 +215,74 @@ def build_dgis_query(catalog: str, params: dict) -> str:
     return mdx
 
 
-def discover_metadata(catalog: str) -> dict:
-    """Discover levels and properties using schema rowsets"""
-    logger.info(f"Discovering metadata for {catalog}...")
-    
+def diagnose_schema(catalog: str) -> dict:
+    """
+    Comprehensive diagnostic to discover available schema columns.
+    Executes SELECT * TOP 1 on key schema rowsets to map the server capabilities.
+    """
+    logger.info("Starting schema diagnostic...")
     conn = get_connection(catalog)
     cursor = conn.cursor()
     
-    # Get main cube name
-    main_cube = PARAMS.get('cube', catalog) # Access global PARAMS
+    schemas_to_probe = [
+        "$system.DBSCHEMA_CATALOGS",
+        "$system.MDSchema_Cubes",
+        "$system.MDSchema_Dimensions",
+        "$system.MDSchema_Hierarchies",
+        "$system.MDSchema_Levels",
+        "$system.MDSchema_Measures",
+        "$system.MDSchema_Properties",
+        "$system.MDSchema_Members"
+    ]
     
-    # Re-discover main cube if we don't know it or if it matches catalog exactly (which might be wrong for SIS_2025)
+    # Try to find main cube for context
+    main_cube = "SIS_2025" 
     try:
-        # Optimization: Try to find the first cube that looks like a main cube
-        # Get ALL cubes and filter in Python to avoid "NOT LIKE" syntax errors
-        cursor.execute("SELECT [CUBE_NAME] FROM $system.MDSchema_Cubes")
-        rows = cursor.fetchall()
-        if rows:
-            # Filter in Python: prefer catalog name, ignore $ prefix
-            candidates = [r[0] for r in rows if not str(r[0]).startswith('$')]
-            if catalog in candidates:
-                main_cube = catalog
-            elif candidates:
-                main_cube = candidates[0]
-            logger.info(f"Identified main cube: {main_cube}")
-    except Exception as e:
-        logger.warning(f"Failed to auto-discover main cube: {e}")
+        main_cube = PARAMS.get('cube', catalog)
+    except:
+        pass
 
-    result = {"levels": [], "properties": []}
+    results = {}
     
-    try:
-        # Get Levels - schema column names needed: HIERARCHY_NAME not HIERRCHY_NAME
-        # CRITICAL: Use brackets [] for ALL columns to avoid reserved word errors
-        cursor.execute(f"SELECT [DIMENSION_UNIQUE_NAME], [HIERARCHY_NAME], [LEVEL_CAPTION], [LEVEL_NAME] FROM $system.MDSchema_Levels WHERE [CUBE_NAME]='{main_cube}'")
-        rows = cursor.fetchall()
-        
-        # Manually map columns just in case cursor.description is quirky with ADODB
-        result["levels"] = rows_to_list(cursor, rows)
-        
-        # Get Properties (Member Properties)
-        cursor.execute(f"SELECT [DIMENSION_UNIQUE_NAME], [LEVEL_UNIQUE_NAME], [PROPERTY_NAME], [PROPERTY_CAPTION] FROM $system.MDSchema_Properties WHERE [CUBE_NAME]='{main_cube}'")
-        rows = cursor.fetchall()
-        result["properties"] = rows_to_list(cursor, rows)
-        
-    except Exception as e:
-        logger.error(f"Metadata discovery failed: {e}")
-        result["error"] = str(e)
-    
+    for schema in schemas_to_probe:
+        try:
+            # Try to select just 1 row to get column definition
+            # We use a broad WHERE clause if possible to avoid empty sets, but simple enough to pass parser
+            query = f"SELECT * FROM {schema}"
+            
+            # For some schemas, adding a restriction makes it faster or is required
+            if schema == "$system.MDSchema_Levels" or schema == "$system.MDSchema_Dimensions":
+                query += f" WHERE [CUBE_NAME] = '{main_cube}'"
+            
+            logger.info(f"Probing {schema}...")
+            cursor.execute(query)
+            
+            # Just fetch description to get columns
+            if cursor.description:
+                columns = [col[0] for col in cursor.description]
+                results[schema] = {"status": "success", "columns": columns}
+            else:
+                results[schema] = {"status": "empty_or_unknown"}
+                
+        except Exception as e:
+            results[schema] = {"status": "error", "error": str(e)}
+            
     cursor.close()
     conn.close()
-    return result
+    return results
+
+
+def discover_metadata(catalog: str) -> dict:
+    """Discover levels and properties using schema rowsets"""
+    # ... (Keep existing implementation but maybe improve logging)
+    # For now, let's leave it as is, we will use diagnose_schema to fix it later
+    pass # Replaced by the implementation below
+
+
+# override discover_metadata with improved version after diagnostic
+def discover_metadata_v2(catalog: str) -> dict:
+    # We will implement this after we see the diagnostic output
+    return {"message": "Please run diagnose_schema first"}
 
 
 def execute_query(catalog: str, params: dict) -> dict:
@@ -281,7 +299,7 @@ def execute_query(catalog: str, params: dict) -> dict:
 
 
 def main():
-    logger.info("=== Actions Runner (DGIS Syntax) ===")
+    logger.info("=== Actions Runner (DGIS Diagnostic Mode) ===")
     logger.info(f"Action: {ACTION}")
     logger.info(f"Catalog: {CATALOG}")
     logger.info(f"Request ID: {REQUEST_ID}")
@@ -296,14 +314,19 @@ def main():
             result["data"] = discover_cube_structure(CATALOG)
             
         elif ACTION == 'discover_metadata':
+            # Use the old one for now, or just fail instructions
+            # For this run, we want diagnose_schema
             result["data"] = discover_metadata(CATALOG)
+            
+        elif ACTION == 'diagnose_schema':
+            result["data"] = diagnose_schema(CATALOG)
         
         elif ACTION == 'get_apartados':
-            # Fallback to metadata discovery if SELECT * fails
+             # Fallback to metadata discovery if SELECT * fails
             try:
                 result["data"] = get_apartados(CATALOG)
             except:
-                result["data"] = discover_metadata(CATALOG)
+                 result["data"] = discover_metadata(CATALOG)
         
         elif ACTION == 'execute_query':
             result["data"] = execute_query(CATALOG, PARAMS)

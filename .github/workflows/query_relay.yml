@@ -11,6 +11,7 @@ on:
           - get_catalogs
           - discover_structure
           - discover_metadata
+          - diagnose_schema
           - get_apartados
           - execute_query
           - execute_mdx
