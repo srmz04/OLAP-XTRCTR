@@ -150,8 +150,21 @@ def get_apartados(catalog: str) -> dict:
         members = []
         if rows:
             columns = [column[0] for column in cursor.description]
+            
+            # Smart Hierarchy Selection:
+            # We ordered by LEVEL_NUMBER ASC. The first row has the lowest level (e.g. 1).
+            # We only want members of that level (Apartados), ignoring deeper levels (Variables L2).
+            # If L1 is empty (some cubes), it will pick up L2 automatically.
+            target_level = rows[0][2] # LEVEL_NUMBER is 3rd column
+            
+            logger.info(f"Auto-detected top level: {target_level} (filtering {len(rows)} candidates)")
+            
             for row in rows:
-                members.append(dict(zip(columns, row)))
+                if row[2] == target_level:
+                    members.append(dict(zip(columns, row)))
+                else:
+                    # Since it is sorted, we can stop processing once we hit deeper levels
+                    break
         
         # If empty at >0 (unlikely for valid dim), try Level 0 (All) children potentially?
         # But usually Level > 0 catch actual members. 
