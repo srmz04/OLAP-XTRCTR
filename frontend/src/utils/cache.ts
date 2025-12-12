@@ -276,6 +276,113 @@ class SmartCache {
     invalidateGistCache(): void {
         this.gistFilesCache = null;
     }
+
+    /**
+     * Get cache health status
+     */
+    async getStatus(): Promise<{
+        memory: number;
+        localStorage: number;
+        gistConnected: boolean;
+    }> {
+        let localStorageCount = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key?.startsWith('olapxtrctr_')) {
+                localStorageCount++;
+            }
+        }
+
+        let gistConnected = false;
+        if (this.config.gistId && this.config.gistToken) {
+            try {
+                const response = await fetch(
+                    `https://api.github.com/gists/${this.config.gistId}`,
+                    {
+                        method: 'HEAD',
+                        headers: {
+                            Authorization: `token ${this.config.gistToken}`,
+                        },
+                    }
+                );
+                gistConnected = response.ok;
+            } catch {
+                gistConnected = false;
+            }
+        }
+
+        return {
+            memory: this.memory.size,
+            localStorage: localStorageCount,
+            gistConnected,
+        };
+    }
+
+    /**
+     * Validate specific cached entry
+     */
+    async validate(key: string): Promise<{
+        exists: boolean;
+        valid: boolean;
+        tier: 'memory' | 'localStorage' | 'gist' | null;
+        age?: number;
+    }> {
+        // Check L1
+        const memEntry = this.memory.get(key);
+        if (memEntry) {
+            return {
+                exists: true,
+                valid: this.isValid(memEntry as CacheEntry<unknown>),
+                tier: 'memory',
+                age: Date.now() - memEntry.timestamp,
+            };
+        }
+
+        // Check L2
+        const localEntry = this.getFromLocalStorage(key);
+        if (localEntry) {
+            return {
+                exists: true,
+                valid: this.isValid(localEntry),
+                tier: 'localStorage',
+                age: Date.now() - localEntry.timestamp,
+            };
+        }
+
+        // Check L3
+        const gistEntry = await this.getFromGist(key);
+        if (gistEntry) {
+            return {
+                exists: true,
+                valid: this.isValid(gistEntry),
+                tier: 'gist',
+                age: Date.now() - gistEntry.timestamp,
+            };
+        }
+
+        return { exists: false, valid: false, tier: null };
+    }
+
+    /**
+     * Get with fallback function (for cache miss recovery)
+     */
+    async getOrFetch<T>(
+        key: string,
+        fetchFn: () => Promise<T>,
+        ttl?: number
+    ): Promise<T> {
+        // Try cache first
+        const cached = await this.get<T>(key);
+        if (cached !== null) {
+            return cached;
+        }
+
+        // Cache miss - fetch and save
+        console.log(`[Cache] Fetching fresh data for: ${key}`);
+        const data = await fetchFn();
+        await this.set(key, data, ttl);
+        return data;
+    }
 }
 
 // Singleton instance

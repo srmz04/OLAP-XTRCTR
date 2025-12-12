@@ -26,7 +26,21 @@ export const catalogService = {
 
     getApartados: async (catalogName: string): Promise<any[]> => {
         if (useActions()) {
-            return actionsService.getApartados(catalogName);
+            const rawData = await actionsService.getApartados(catalogName);
+            // Transform DGIS format to wizard format
+            return rawData.map((item: any) => {
+                // Extract ID from MEMBER_UNIQUE_NAME like "[DIM...].[Apartado].&[001 CONSULTA]"
+                const caption = item.MEMBER_CAPTION || item.name || '';
+                const match = caption.match(/^(\d+)\s/);
+                const id = match ? match[1] : caption.substring(0, 3);
+
+                return {
+                    id: id,
+                    name: caption,
+                    uniqueName: item.MEMBER_UNIQUE_NAME || item.uniqueName || '',
+                    hierarchy: '[DIM VARIABLES2025].[Apartado y Variable]'
+                };
+            });
         }
         const response = await apiClient.get(`/catalogs/${catalogName}/apartados`);
         return response.data;
