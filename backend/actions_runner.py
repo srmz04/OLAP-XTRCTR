@@ -91,15 +91,15 @@ def discover_cube_structure(catalog: str) -> dict:
     
     # Get cubes - main cube doesn't start with $
     cursor.execute("""
-        SELECT CUBE_NAME AS cube, DIMENSION_CAPTION AS dimension
+        SELECT CUBE_NAME AS [cube_name], DIMENSION_CAPTION AS [dimension]
         FROM $system.MDSchema_Dimensions
     """)
     rows = cursor.fetchall()
     dimensions = rows_to_list(cursor, rows)
     
     # Find main cube (no $ prefix)
-    main_cubes = [d for d in dimensions if not d.get('cube', '').startswith('$')]
-    main_cube = main_cubes[0]['cube'] if main_cubes else catalog
+    main_cubes = [d for d in dimensions if not d.get('cube_name', '').startswith('$')]
+    main_cube = main_cubes[0]['cube_name'] if main_cubes else catalog
     
     cursor.close()
     conn.close()
@@ -107,7 +107,7 @@ def discover_cube_structure(catalog: str) -> dict:
     return {
         "catalog": catalog,
         "main_cube": main_cube,
-        "dimensions": [d for d in dimensions if d.get('cube') == main_cube]
+        "dimensions": [d for d in dimensions if d.get('cube_name') == main_cube]
     }
 
 
