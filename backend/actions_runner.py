@@ -228,14 +228,15 @@ def discover_metadata(catalog: str) -> dict:
     # Re-discover main cube if we don't know it or if it matches catalog exactly (which might be wrong for SIS_2025)
     try:
         # Optimization: Try to find the first cube that looks like a main cube
-        cursor.execute("SELECT CUBE_NAME FROM $system.MDSchema_Cubes WHERE CUBE_NAME NOT LIKE '$%'")
+        # Get ALL cubes and filter in Python to avoid "NOT LIKE" syntax errors
+        cursor.execute("SELECT [CUBE_NAME] FROM $system.MDSchema_Cubes")
         rows = cursor.fetchall()
         if rows:
-            # Prefer the one that matches catalog if present, else take the first one
-            candidates = [r[0] for r in rows]
+            # Filter in Python: prefer catalog name, ignore $ prefix
+            candidates = [r[0] for r in rows if not str(r[0]).startswith('$')]
             if catalog in candidates:
                 main_cube = catalog
-            else:
+            elif candidates:
                 main_cube = candidates[0]
             logger.info(f"Identified main cube: {main_cube}")
     except Exception as e:
@@ -245,14 +246,15 @@ def discover_metadata(catalog: str) -> dict:
     
     try:
         # Get Levels - schema column names needed: HIERARCHY_NAME not HIERRCHY_NAME
-        cursor.execute(f"SELECT DIMENSION_UNIQUE_NAME, HIERARCHY_NAME, LEVEL_CAPTION, LEVEL_NAME FROM $system.MDSchema_Levels WHERE CUBE_NAME='{main_cube}'")
+        # CRITICAL: Use brackets [] for ALL columns to avoid reserved word errors
+        cursor.execute(f"SELECT [DIMENSION_UNIQUE_NAME], [HIERARCHY_NAME], [LEVEL_CAPTION], [LEVEL_NAME] FROM $system.MDSchema_Levels WHERE [CUBE_NAME]='{main_cube}'")
         rows = cursor.fetchall()
         
         # Manually map columns just in case cursor.description is quirky with ADODB
         result["levels"] = rows_to_list(cursor, rows)
         
         # Get Properties (Member Properties)
-        cursor.execute(f"SELECT DIMENSION_UNIQUE_NAME, LEVEL_UNIQUE_NAME, PROPERTY_NAME, PROPERTY_CAPTION FROM $system.MDSchema_Properties WHERE CUBE_NAME='{main_cube}'")
+        cursor.execute(f"SELECT [DIMENSION_UNIQUE_NAME], [LEVEL_UNIQUE_NAME], [PROPERTY_NAME], [PROPERTY_CAPTION] FROM $system.MDSchema_Properties WHERE [CUBE_NAME]='{main_cube}'")
         rows = cursor.fetchall()
         result["properties"] = rows_to_list(cursor, rows)
         
