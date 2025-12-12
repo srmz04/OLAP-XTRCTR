@@ -132,21 +132,43 @@ def get_apartados(catalog: str) -> dict:
             cols = [c[0] for c in cursor.description]
             # Look for apartado column
             apartado_cols = [c for c in cols if 'apartado' in c.lower()]
-            logger.info(f"Found columns: {cols[:5]}... (showing first 5)")
-            logger.info(f"Apartado columns: {apartado_cols}")
+    conn = get_connection(catalog)
+    cursor = conn.cursor()
+    main_cube = PARAMS.get('cube', catalog)
+    
+    try:
+        # Find the Variables dimension (it might have 2025 suffix)
+        cursor.execute("SELECT [DIMENSION_UNIQUE_NAME] FROM $system.MDSchema_Dimensions WHERE [DIMENSION_TYPE]=3") # 3 = Regular/Unknown? Just try name match
+        # Actually safer to look for name match in Python
+        cursor.execute(f"SELECT [DIMENSION_UNIQUE_NAME] FROM $system.MDSchema_Dimensions WHERE [CUBE_NAME]='{main_cube}'")
+        rows = cursor.fetchall()
+        dims = [r[0] for r in rows]
         
-        cursor.close()
-        conn.close()
+        # Look for "VARIABLES"
+        var_dim = next((d for d in dims if "VARIABLES" in d.upper()), None)
+        if not var_dim:
+             # Fallback: take user param or default
+             var_dim = PARAMS.get("dimension", "[DIM VARIABLES]")
+        
+        logger.info(f"Using dimension for Apartados: {var_dim}")
+        
+        # Get Members directly from schema - SAFER/FASTER than MDX on large cubes
+        # Filter where LEVEL_NUMBER > 0 to skip (All)
+        cursor.execute(f"SELECT [MEMBER_UNIQUE_NAME], [MEMBER_CAPTION] FROM $system.MDSchema_Members WHERE [CUBE_NAME]='{main_cube}' AND [DIMENSION_UNIQUE_NAME]='{var_dim}' AND [LEVEL_NUMBER]=1")
+        rows = cursor.fetchall()
+        
+        members = rows_to_list(cursor, rows)
         
         return {
-            "structure": structure,
-            "columns_sample": cols[:10] if rows else [],
-            "apartados": []  # Need more analysis
+            "dimension": var_dim,
+            "apartados": members
         }
     except Exception as e:
+        logger.error(f"Get apartados failed: {e}")
+        return {"error": str(e)}
+    finally:
         cursor.close()
         conn.close()
-        return {"error": str(e), "structure": structure}
 
 
 def execute_mdx(catalog: str, mdx: str) -> dict:
@@ -179,38 +201,34 @@ def execute_mdx(catalog: str, mdx: str) -> dict:
         return {"rows": [], "columns": [], "rowCount": 0, "error": str(e), "mdx": mdx}
 
 
-def build_dgis_query(catalog: str, params: dict) -> str:
+def build_mdx_query(catalog: str, params: dict) -> str:
     """
-    Build DGIS-style MDX query
-    
-    DGIS Syntax: SELECT [$DIM.field] FROM [CUBE].[Measures] WHERE [$DIM.field]="Value"
-    NOT SSAS: [Dimension].[Hierarchy].[Level].&[Key]
+    Build Standard SSAS MDX Query
+    Reverting DGIS syntax since diagnostic confirmed standard syntax support.
+    Expected: SELECT ... FROM [CUBE] WHERE [Dim].[Hier].&[Key]
     """
     main_cube = params.get('cube', catalog)
     
     # Columns to select
-    select_fields = params.get('select', ['*'])
+    select_fields = params.get('select', ['[Measures].AllMembers']) # Default to something valid
     if select_fields == ['*']:
-        select_clause = '*'
+        select_clause = '*' # Should avoid this on large cubes, but user might ask
     else:
         select_clause = ', '.join(select_fields)
     
-    # WHERE filters - DGIS style: [$DIM.field]="Value"
+    # WHERE filters - Standard SSAS: [Dim].[Hier].&[Key]
     filters = params.get('filters', [])
     where_parts = []
     for f in filters:
-        dim = f.get('dimension', '')
-        field = f.get('field', '')
-        value = f.get('value', '')
-        if dim and field and value:
-            # DGIS format: [$dimension.field]="value"
-            where_parts.append(f'[${dim}.{field}]="{value}"')
+        member_unique_name = f.get('member_unique_name')
+        if member_unique_name:
+            where_parts.append(member_unique_name)
     
     where_clause = ' AND '.join(where_parts) if where_parts else ''
     
-    mdx = f"SELECT {select_clause} FROM [{main_cube}].[Measures]"
+    mdx = f"SELECT {{{select_clause}}} ON COLUMNS FROM [{main_cube}]"
     if where_clause:
-        mdx += f" WHERE {where_clause}"
+        mdx += f" WHERE ({where_clause})"
     
     return mdx
 
@@ -273,28 +291,61 @@ def diagnose_schema(catalog: str) -> dict:
 
 
 def discover_metadata(catalog: str) -> dict:
-    """Discover levels and properties using schema rowsets"""
-    # ... (Keep existing implementation but maybe improve logging)
-    # For now, let's leave it as is, we will use diagnose_schema to fix it later
-    pass # Replaced by the implementation below
+    """Discover levels and properties using schema rowsets - Standard SSAS"""
+    logger.info(f"Discovering metadata for {catalog}...")
+    
+    conn = get_connection(catalog)
+    cursor = conn.cursor()
+    
+    # Get main cube name
+    main_cube = PARAMS.get('cube', catalog)
+    
+    try:
+        # Optimization: Try to find the first cube that looks like a main cube
+        cursor.execute("SELECT [CUBE_NAME] FROM $system.MDSchema_Cubes")
+        rows = cursor.fetchall()
+        if rows:
+            candidates = [r[0] for r in rows if not str(r[0]).startswith('$')]
+            if catalog in candidates:
+                main_cube = catalog
+            elif candidates:
+                main_cube = candidates[0]
+            logger.info(f"Identified main cube: {main_cube}")
+    except Exception as e:
+        logger.warning(f"Failed to auto-discover main cube: {e}")
 
-
-# override discover_metadata with improved version after diagnostic
-def discover_metadata_v2(catalog: str) -> dict:
-    # We will implement this after we see the diagnostic output
-    return {"message": "Please run diagnose_schema first"}
+    result = {"levels": [], "properties": []}
+    
+    try:
+        # Get Levels - Checked against schema_diag_01 result
+        cursor.execute(f"SELECT [DIMENSION_UNIQUE_NAME], [HIERARCHY_UNIQUE_NAME], [LEVEL_UNIQUE_NAME], [LEVEL_CAPTION] FROM $system.MDSchema_Levels WHERE [CUBE_NAME]='{main_cube}'")
+        rows = cursor.fetchall()
+        result["levels"] = rows_to_list(cursor, rows)
+        
+        # Get Properties (Member Properties)
+        cursor.execute(f"SELECT [DIMENSION_UNIQUE_NAME], [LEVEL_UNIQUE_NAME], [PROPERTY_NAME], [PROPERTY_CAPTION] FROM $system.MDSchema_Properties WHERE [CUBE_NAME]='{main_cube}'")
+        rows = cursor.fetchall()
+        result["properties"] = rows_to_list(cursor, rows)
+        
+    except Exception as e:
+        logger.error(f"Metadata discovery failed: {e}")
+        result["error"] = str(e)
+    
+    cursor.close()
+    conn.close()
+    return result
 
 
 def execute_query(catalog: str, params: dict) -> dict:
-    """Execute query with DGIS syntax builder"""
+    """Execute query with Standard syntax builder"""
     
     # Check for raw MDX first
     raw_mdx = params.get('mdx')
     if raw_mdx:
         return execute_mdx(catalog, raw_mdx)
     
-    # Build DGIS-style query
-    mdx = build_dgis_query(catalog, params)
+    # Build query
+    mdx = build_mdx_query(catalog, params)
     return execute_mdx(catalog, mdx)
 
 
@@ -314,19 +365,13 @@ def main():
             result["data"] = discover_cube_structure(CATALOG)
             
         elif ACTION == 'discover_metadata':
-            # Use the old one for now, or just fail instructions
-            # For this run, we want diagnose_schema
             result["data"] = discover_metadata(CATALOG)
             
         elif ACTION == 'diagnose_schema':
             result["data"] = diagnose_schema(CATALOG)
         
         elif ACTION == 'get_apartados':
-             # Fallback to metadata discovery if SELECT * fails
-            try:
-                result["data"] = get_apartados(CATALOG)
-            except:
-                 result["data"] = discover_metadata(CATALOG)
+            result["data"] = get_apartados(CATALOG)
         
         elif ACTION == 'execute_query':
             result["data"] = execute_query(CATALOG, PARAMS)
