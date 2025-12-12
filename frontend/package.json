@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "python3 find_vm.py",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

@@ -6,10 +6,10 @@ import os
 
 logger = logging.getLogger(__name__)
 
-class SnapshotOlapService:
+class MockOlapService:
     """
-    Serves REAL DATA from static CSV snapshots when live connection is unavailable.
-    (Previously named MockOlapService, renamed to clarify data authenticity)
+    Mock service for Linux development where ADODBAPI/COM is not available.
+    Reads metadata from a CSV file to mimic SSAS responses.
     """
     
     def __init__(self, csv_path: str = "mock_data.csv"):

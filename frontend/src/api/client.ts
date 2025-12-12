@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Default to localhost:8001 if VITE_API_URL is not set
-const BASE_URL = 'http://192.168.1.5:8000';
+// Default to localhost:8001/api (alternate dev port)
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
 
 export const apiClient = axios.create({
     baseURL: BASE_URL,

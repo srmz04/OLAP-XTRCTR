@@ -12,7 +12,7 @@ import os
 import time
 
 # Configuration
-TARGET_PORT = 8000
+TARGET_PORT = 8001
 CLIENT_FILE = "src/api/client.ts"
 ENV_FILE = ".env"
 
@@ -90,7 +90,7 @@ def scan_network():
     return found_ips
 
 def update_files(ip):
-    base_url = f"http://{ip}:{TARGET_PORT}"
+    base_url = f"http://{ip}:{TARGET_PORT}/api"
     print(f"✅ FOUND VM IP: {ip}")
     print(f"📝 Updating configuration to: {base_url}")
 
