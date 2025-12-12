@@ -49,7 +49,7 @@ async function dispatchAndWait<T>(
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                ref: 'main',
+                ref: 'master',
                 inputs: {
                     action,
                     catalog: catalog || '',

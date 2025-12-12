@@ -1,0 +1,665 @@
+{
+  "request_id": "test_002",
+  "action": "get_catalogs",
+  "status": "success",
+  "data": {
+    "catalogs": [
+      {
+        "name": "CLUES_2019",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "CONSULTA_EXTERNA_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "CONSULTA_EXTERNA_C_21",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "cubo_lesiones_2017",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "cubo_lesiones_2018",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Cubo_Lesiones2019",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "CuboLesiones2020",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "CuboLesiones2021",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "CuboLesiones2022",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "CuboSec_18_22",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DEFUNCIONES_2018",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DEFUNCIONES_2019",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DEFUNCIONES_2020",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DEFUNCIONES_2021",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DEFUNCIONES_2022",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DEFUNCIONES_2022_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DEFUNCIONES_2023",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DEFUNCIONES_2023_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DEFUNCIONES_2024",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DEFUNCIONES_2024_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DEFUNCIONES_2025",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DEFUNCIONES_2025_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Defunciones_hist",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Defunciones_hist_2022",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Defunciones_hist_2023",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DEFUNCIONES_HIST_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DERECHOHABIENCIA",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DERECHOHABIENCIA_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Detecciones",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "DETECCIONES_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "EGRESOS2018",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Egresos2019_19",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Egresos2020",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Egresos2021",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Egresos2022",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Egresos2023",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Egresos2024",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Egresos2025",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Lesiones",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "LESIONES_Historico",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Lesiones2016",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Maternas_2018",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Maternas_2019",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Maternas_2021_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Maternas_2022",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Maternas_2023",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "MUERTES_FETALES",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "MUERTES_FETALES_2022",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "MUERTES_FETALES_2022_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "MUERTES_FETALES_2023",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "MUERTES_FETALES_2023_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "MUERTES_FETALES_2024",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "MUERTES_FETALES_2024_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "MUERTES_FETALES_2025",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "MUERTES_FETALES_2025_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "MUERTES_FETALES_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "MUERTES_FETALES_SINBA",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "NACIMIENTOS_2018",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "NACIMIENTOS_2019",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "NACIMIENTOS_2020",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "NACIMIENTOS_2021",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "NACIMIENTOS_2021_CAL",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "NACIMIENTOS_2022",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "NACIMIENTOS_2022_CAL",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "NACIMIENTOS_2023",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "NACIMIENTOS_2023_CAL",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "NACIMIENTOS_2024",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "NACIMIENTOS_2024_CAL",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "NACIMIENTOS_2025",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "NACIMIENTOS_2025_CAL",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Personal_Salud",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "PLANIFICACION_FAM_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "PLANIFICACION_FAMILIAR",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "POB_MIT_PROYECCIONES",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "poblacion_c",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "PROY_DEF_EDAD",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "recursos_sector_ok_2",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Reporte_Diario",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "saeh_sector_hist",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "saeh2011",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "saeh2012",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "saeh2013",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "saeh2016",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "saeh2017",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SALUD_BUCAL",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SALUD_BUCAL_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SALUD_MENTAL",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SALUD_MENTAL_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "seed2013",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "seed2016",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "seed2017_cierre",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SICUENTAS",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "sinac_2015",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "sinac_2016",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "sinac2017",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SINERHIAS",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "sis",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2017_NEW",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2018_NEW2",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2019_2",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2020",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2020_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2021",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2021_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2022",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2022_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2023",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2023_2",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2023_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2024",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2024_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2025",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_2025_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_SECTORIAL",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "SIS_SECTORIAL_C",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "sis2010",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "sis2011",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "sis2012",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "sis2015",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "sis2016",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "TEF_NAC_PROYECCIONES",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "urgencias2011",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "urgencias2012",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "urgencias2013",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "URGENCIAS2017",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "URGENCIAS2018",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Urgencias2019",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Urgencias2020",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Urgencias2021",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Urgencias2022",
+        "description": "",
+        "created": ""
+      },
+      {
+        "name": "Urgencias2024",
+        "description": "",
+        "created": ""
+      }
+    ]
+  }
+}
+
