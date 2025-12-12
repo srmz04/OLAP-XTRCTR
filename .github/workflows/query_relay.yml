@@ -37,30 +37,40 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip'
 
-      - name: Install setuptools for adodbapi
-        run: pip install setuptools==57.5.0
-
-      - name: Download and install adodbapi
-        run: |
-          Invoke-WebRequest -Uri "https://github.com/mhammond/pywin32/releases/download/b306/pywin32-306.win-amd64-py3.10.exe" -OutFile "pywin32.exe"
-          Start-Process -Wait -FilePath "pywin32.exe" -ArgumentList "/S"
-          pip install pywin32
-          Invoke-WebRequest -Uri "https://sourceforge.net/projects/adodbapi/files/adodbapi/2.6.2.0/adodbapi-2.6.2.0.zip/download" -OutFile "adodbapi.zip"
-          Expand-Archive -Path "adodbapi.zip" -DestinationPath "adodbapi_src"
-          cd adodbapi_src/adodbapi-2.6.2.0
-          python setup.py install
+      - name: Download OLEDB Provider
         shell: powershell
-
-      - name: Install OLEDB Driver
         run: |
           $url = "https://go.microsoft.com/fwlink/?linkid=829576"
-          Invoke-WebRequest -Uri $url -OutFile "msolap.msi"
-          Start-Process msiexec.exe -Wait -ArgumentList '/i msolap.msi /quiet /qn /norestart IACCEPTMSOLABORSLICENSETERMS=YES'
+          $output = "SQL_AS_OLEDB.msi"
+          Invoke-WebRequest -Uri $url -OutFile $output
+          Write-Host "Downloaded OLEDB Provider"
+
+      - name: Install OLEDB Provider
         shell: powershell
+        run: |
+          Start-Process msiexec.exe -ArgumentList '/i', 'SQL_AS_OLEDB.msi', '/quiet', '/norestart' -Wait
+          Write-Host "Installed OLEDB Provider"
 
       - name: Install Python dependencies
-        run: pip install pandas
+        shell: powershell
+        run: |
+          pip install --upgrade pip
+          pip install "setuptools==57.5.0" wheel
+          
+          # Download adodbapi from PyPI
+          $url = "https://files.pythonhosted.org/packages/source/a/adodbapi/adodbapi-2.6.2.0.zip"
+          Invoke-WebRequest -Uri $url -OutFile "adodbapi.zip"
+          
+          # Extract and install
+          Expand-Archive -Path "adodbapi.zip" -DestinationPath "adodb_src" -Force
+          cd adodb_src\adodbapi-2.6.2.0
+          python setup.py install
+          cd ..\..
+          
+          # Install remaining dependencies
+          pip install pandas pywin32
 
       - name: Execute Query
         id: query
