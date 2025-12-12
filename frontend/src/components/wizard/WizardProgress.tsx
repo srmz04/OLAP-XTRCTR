@@ -7,7 +7,7 @@ interface WizardProgressProps {
 
 export const WizardProgress: React.FC<WizardProgressProps> = ({
     currentStep,
-    totalSteps
+    totalSteps: _totalSteps
 }) => {
     const steps = [
         { number: 1, label: 'Apartados' },

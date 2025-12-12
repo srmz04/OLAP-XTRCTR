@@ -28,7 +28,7 @@ const MemberSelectorModal: React.FC<{
   // Fetch members for this dimension/hierarchy
   const { data: members, isLoading } = useQuery<Member[]>({
     queryKey: ['members', catalog, filter.dimension, filter.hierarchy, filter.level],
-    queryFn: () => catalogService.getMembers(catalog, filter.dimension, filter.hierarchy, filter.level),
+    queryFn: () => catalogService.getMembers(catalog, filter.dimension, filter.hierarchy, filter.level || ''),
   });
 
   const filteredMembers = useMemo(() => {
