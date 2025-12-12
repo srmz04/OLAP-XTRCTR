@@ -112,34 +112,15 @@ def discover_cube_structure(catalog: str) -> dict:
 
 
 def get_apartados(catalog: str) -> dict:
-    """Get apartados using DGIS field discovery"""
+    """Get apartados using schema rowsets - safe and fast"""
     logger.info(f"Fetching apartados from {catalog}...")
     
-    # First discover structure
-    structure = discover_cube_structure(catalog)
-    main_cube = structure.get("main_cube", catalog)
-    
-    conn = get_connection(catalog)
-    cursor = conn.cursor()
-    
-    try:
-        # Try to get sample data to discover field names
-        # DGIS style: SELECT field FROM [CUBE].[Measures]
-        cursor.execute(f"SELECT * FROM [{main_cube}].[Measures]")
-        rows = cursor.fetchmany(10)  # Just get 10 rows to discover columns
-        
-        if rows and cursor.description:
-            cols = [c[0] for c in cursor.description]
-            # Look for apartado column
-            apartado_cols = [c for c in cols if 'apartado' in c.lower()]
     conn = get_connection(catalog)
     cursor = conn.cursor()
     main_cube = PARAMS.get('cube', catalog)
     
     try:
         # Find the Variables dimension (it might have 2025 suffix)
-        cursor.execute("SELECT [DIMENSION_UNIQUE_NAME] FROM $system.MDSchema_Dimensions WHERE [DIMENSION_TYPE]=3") # 3 = Regular/Unknown? Just try name match
-        # Actually safer to look for name match in Python
         cursor.execute(f"SELECT [DIMENSION_UNIQUE_NAME] FROM $system.MDSchema_Dimensions WHERE [CUBE_NAME]='{main_cube}'")
         rows = cursor.fetchall()
         dims = [r[0] for r in rows]
@@ -147,8 +128,8 @@ def get_apartados(catalog: str) -> dict:
         # Look for "VARIABLES"
         var_dim = next((d for d in dims if "VARIABLES" in d.upper()), None)
         if not var_dim:
-             # Fallback: take user param or default
-             var_dim = PARAMS.get("dimension", "[DIM VARIABLES]")
+            # Fallback: take user param or default
+            var_dim = PARAMS.get("dimension", "[DIM VARIABLES]")
         
         logger.info(f"Using dimension for Apartados: {var_dim}")
         
