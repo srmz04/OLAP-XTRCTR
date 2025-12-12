@@ -223,23 +223,32 @@ def discover_metadata(catalog: str) -> dict:
     cursor = conn.cursor()
     
     # Get main cube name
-    main_cube = params.get('cube', catalog) # Access global params if needed or default to catalog
-    # Re-discover main cube if we don't know it
+    main_cube = PARAMS.get('cube', catalog) # Access global PARAMS
+    
+    # Re-discover main cube if we don't know it or if it matches catalog exactly (which might be wrong for SIS_2025)
     try:
+        # Optimization: Try to find the first cube that looks like a main cube
         cursor.execute("SELECT CUBE_NAME FROM $system.MDSchema_Cubes WHERE CUBE_NAME NOT LIKE '$%'")
         rows = cursor.fetchall()
         if rows:
-            main_cube = rows[0][0]
-    except:
-        pass
+            # Prefer the one that matches catalog if present, else take the first one
+            candidates = [r[0] for r in rows]
+            if catalog in candidates:
+                main_cube = catalog
+            else:
+                main_cube = candidates[0]
+            logger.info(f"Identified main cube: {main_cube}")
+    except Exception as e:
+        logger.warning(f"Failed to auto-discover main cube: {e}")
 
     result = {"levels": [], "properties": []}
     
     try:
-        # Get Levels
-        cursor.execute(f"SELECT DIMENSION_UNIQUE_NAME, HIERRCHY_NAME, LEVEL_CAPTION, LEVEL_NAME FROM $system.MDSchema_Levels WHERE CUBE_NAME='{main_cube}'")
+        # Get Levels - schema column names needed: HIERARCHY_NAME not HIERRCHY_NAME
+        cursor.execute(f"SELECT DIMENSION_UNIQUE_NAME, HIERARCHY_NAME, LEVEL_CAPTION, LEVEL_NAME FROM $system.MDSchema_Levels WHERE CUBE_NAME='{main_cube}'")
         rows = cursor.fetchall()
-        cols = [c[0] for c in cursor.description]
+        
+        # Manually map columns just in case cursor.description is quirky with ADODB
         result["levels"] = rows_to_list(cursor, rows)
         
         # Get Properties (Member Properties)
@@ -248,6 +257,7 @@ def discover_metadata(catalog: str) -> dict:
         result["properties"] = rows_to_list(cursor, rows)
         
     except Exception as e:
+        logger.error(f"Metadata discovery failed: {e}")
         result["error"] = str(e)
     
     cursor.close()
