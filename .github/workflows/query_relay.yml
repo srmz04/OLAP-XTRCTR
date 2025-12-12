@@ -10,6 +10,7 @@ on:
         options:
           - get_catalogs
           - discover_structure
+          - discover_metadata
           - get_apartados
           - execute_query
           - execute_mdx

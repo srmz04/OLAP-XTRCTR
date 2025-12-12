@@ -215,6 +215,46 @@ def build_dgis_query(catalog: str, params: dict) -> str:
     return mdx
 
 
+def discover_metadata(catalog: str) -> dict:
+    """Discover levels and properties using schema rowsets"""
+    logger.info(f"Discovering metadata for {catalog}...")
+    
+    conn = get_connection(catalog)
+    cursor = conn.cursor()
+    
+    # Get main cube name
+    main_cube = params.get('cube', catalog) # Access global params if needed or default to catalog
+    # Re-discover main cube if we don't know it
+    try:
+        cursor.execute("SELECT CUBE_NAME FROM $system.MDSchema_Cubes WHERE CUBE_NAME NOT LIKE '$%'")
+        rows = cursor.fetchall()
+        if rows:
+            main_cube = rows[0][0]
+    except:
+        pass
+
+    result = {"levels": [], "properties": []}
+    
+    try:
+        # Get Levels
+        cursor.execute(f"SELECT DIMENSION_UNIQUE_NAME, HIERRCHY_NAME, LEVEL_CAPTION, LEVEL_NAME FROM $system.MDSchema_Levels WHERE CUBE_NAME='{main_cube}'")
+        rows = cursor.fetchall()
+        cols = [c[0] for c in cursor.description]
+        result["levels"] = rows_to_list(cursor, rows)
+        
+        # Get Properties (Member Properties)
+        cursor.execute(f"SELECT DIMENSION_UNIQUE_NAME, LEVEL_UNIQUE_NAME, PROPERTY_NAME, PROPERTY_CAPTION FROM $system.MDSchema_Properties WHERE CUBE_NAME='{main_cube}'")
+        rows = cursor.fetchall()
+        result["properties"] = rows_to_list(cursor, rows)
+        
+    except Exception as e:
+        result["error"] = str(e)
+    
+    cursor.close()
+    conn.close()
+    return result
+
+
 def execute_query(catalog: str, params: dict) -> dict:
     """Execute query with DGIS syntax builder"""
     
@@ -242,9 +282,16 @@ def main():
         
         elif ACTION == 'discover_structure':
             result["data"] = discover_cube_structure(CATALOG)
+            
+        elif ACTION == 'discover_metadata':
+            result["data"] = discover_metadata(CATALOG)
         
         elif ACTION == 'get_apartados':
-            result["data"] = get_apartados(CATALOG)
+            # Fallback to metadata discovery if SELECT * fails
+            try:
+                result["data"] = get_apartados(CATALOG)
+            except:
+                result["data"] = discover_metadata(CATALOG)
         
         elif ACTION == 'execute_query':
             result["data"] = execute_query(CATALOG, PARAMS)
@@ -256,6 +303,7 @@ def main():
         else:
             result["status"] = "error"
             result["error"] = f"Unknown action: {ACTION}"
+
             
     except Exception as e:
         logger.error(f"Action failed: {e}")
