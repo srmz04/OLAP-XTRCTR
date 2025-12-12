@@ -1,157 +1,295 @@
 /**
- * Actions Service - Pre-cache architecture
- * Reads cached data from Gist, only dispatches for dynamic queries
+ * Actions Service - Hybrid Cache Architecture
+ * 
+ * Uses SmartCache for 3-tier caching:
+ * - L1: Memory (instant)
+ * - L2: localStorage (persistent)
+ * - L3: Gist (shared)
+ * 
+ * Falls back to workflow dispatch when cache miss on critical data
  */
 
-const GIST_ID = import.meta.env.VITE_GIST_ID || '';
+import { smartCache } from '../../utils/cache';
+
+const GITHUB_OWNER = import.meta.env.VITE_GITHUB_OWNER || 'srmz04';
+const GITHUB_REPO = import.meta.env.VITE_GITHUB_REPO || 'OLAP-XTRCTR';
 const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN || '';
+const GIST_ID = import.meta.env.VITE_GIST_ID || '';
 const API_MODE = import.meta.env.VITE_API_MODE || 'direct';
 
-// Cache for Gist data
-let gistCache: Record<string, any> | null = null;
-let cacheTimestamp = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+// Cache keys
+const CACHE_KEYS = {
+    catalogs: 'catalogs',
+    structure: (catalog: string) => `${catalog}_structure`,
+    apartados: (catalog: string) => `${catalog}_apartados`,
+    variables: (catalog: string, apartado: string) => `${catalog}_vars_${apartado}`,
+    dimensions: (catalog: string) => `${catalog}_dimensions`,
+    members: (catalog: string, dim: string) => `${catalog}_members_${dim}`,
+};
+
+// Special TTLs
+const TTL = {
+    catalogs: 30 * 24 * 60 * 60 * 1000, // 30 days - rarely changes
+    structure: 7 * 24 * 60 * 60 * 1000,  // 7 days
+    apartados: 7 * 24 * 60 * 60 * 1000,  // 7 days - 27K items
+    default: 24 * 60 * 60 * 1000,         // 1 day
+};
+
+interface CatalogInfo {
+    name: string;
+    description?: string;
+    created?: string;
+}
+
+interface ApartadoInfo {
+    MEMBER_UNIQUE_NAME: string;
+    MEMBER_CAPTION: string;
+}
+
+interface DimensionInfo {
+    cube_name: string;
+    dimension: string;
+}
 
 /**
- * Fetch entire Gist and cache it
+ * Dispatch workflow and wait for result (with timeout)
  */
-async function fetchGistData(): Promise<Record<string, any>> {
-    const now = Date.now();
+async function dispatchAndWait(
+    action: string,
+    catalog: string,
+    params: Record<string, unknown> = {},
+    timeoutMs = 120000
+): Promise<unknown> {
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Return cached data if still valid
-    if (gistCache && (now - cacheTimestamp) < CACHE_TTL) {
-        return gistCache;
-    }
+    console.log(`[ActionsService] Dispatching ${action} (${requestId})...`);
 
-    if (!GIST_ID) {
-        throw new Error('GIST_ID not configured');
-    }
-
-    console.log('[ActionsService] Fetching Gist cache...');
-
-    const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-        headers: {
-            'Accept': 'application/vnd.github.v3+json',
-            ...(GITHUB_TOKEN ? { 'Authorization': `Bearer ${GITHUB_TOKEN}` } : {})
+    // Dispatch workflow
+    const dispatchResponse = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/query_relay.yml/dispatches`,
+        {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${GITHUB_TOKEN}`,
+                Accept: 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                ref: 'master',
+                inputs: {
+                    action,
+                    catalog,
+                    params: JSON.stringify(params),
+                    request_id: requestId,
+                },
+            }),
         }
-    });
+    );
 
-    if (!response.ok) {
-        throw new Error(`Failed to fetch Gist: ${response.status}`);
+    if (!dispatchResponse.ok) {
+        const error = await dispatchResponse.text();
+        throw new Error(`Workflow dispatch failed: ${dispatchResponse.status} - ${error}`);
     }
 
-    const gist = await response.json();
+    // Poll Gist for result
+    const startTime = Date.now();
+    const pollInterval = 5000; // 5 seconds
 
-    // Parse all JSON files in the Gist
-    const data: Record<string, any> = {};
-    for (const [filename, file] of Object.entries(gist.files)) {
-        if (filename.endsWith('.json')) {
-            try {
-                data[filename] = JSON.parse((file as any).content);
-            } catch {
-                data[filename] = (file as any).content;
+    while (Date.now() - startTime < timeoutMs) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        // Invalidate cache and check for new result
+        smartCache.invalidateGistCache();
+
+        // Check Gist directly for the request result
+        try {
+            const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+                headers: {
+                    Authorization: `Bearer ${GITHUB_TOKEN}`,
+                    Accept: 'application/vnd.github.v3+json',
+                },
+            });
+
+            if (response.ok) {
+                const gist = await response.json();
+                const resultFile = gist.files[`${requestId}.json`];
+
+                if (resultFile) {
+                    const result = JSON.parse(resultFile.content);
+                    console.log(`[ActionsService] Result received for ${requestId}`);
+                    return result.data;
+                }
             }
+        } catch (e) {
+            console.warn('[ActionsService] Poll check failed:', e);
         }
+
+        console.log(`[ActionsService] Waiting... (${Math.round((Date.now() - startTime) / 1000)}s)`);
     }
 
-    gistCache = data;
-    cacheTimestamp = now;
-
-    console.log('[ActionsService] Gist cache loaded:', Object.keys(data));
-    return data;
+    throw new Error(`Timeout waiting for workflow result: ${requestId}`);
 }
 
 /**
- * Get cached catalogs from Gist
- */
-async function getCachedCatalogs(): Promise<any[]> {
-    const data = await fetchGistData();
-
-    // Look for catalogs cache file
-    const catalogsFile = data['catalogs_cache.json'] || data['test_002.json'];
-
-    if (catalogsFile && catalogsFile.data && catalogsFile.data.catalogs) {
-        return catalogsFile.data.catalogs;
-    }
-
-    // Try to find any request with get_catalogs action
-    for (const [filename, content] of Object.entries(data)) {
-        if (content && content.action === 'get_catalogs' && content.status === 'success') {
-            return content.data.catalogs;
-        }
-    }
-
-    throw new Error('No cached catalogs found in Gist');
-}
-
-/**
- * Actions-based catalog service with pre-cache
+ * Actions-based catalog service with hybrid cache
  */
 export const actionsService = {
     isEnabled: () => API_MODE === 'actions' && !!GIST_ID,
 
-    getCatalogs: async () => {
-        // Always read from cache, no dispatch needed
-        return getCachedCatalogs();
-    },
+    /**
+     * Get catalogs - cache first, dispatch if miss
+     */
+    getCatalogs: async (): Promise<CatalogInfo[]> => {
+        const cacheKey = CACHE_KEYS.catalogs;
 
-    getApartados: async (catalogName: string) => {
-        const data = await fetchGistData();
-        const cacheFile = data[`apartados_${catalogName}.json`];
-
-        if (cacheFile && cacheFile.data && cacheFile.data.apartados) {
-            return cacheFile.data.apartados;
+        // Check cache
+        const cached = await smartCache.get<CatalogInfo[]>(cacheKey);
+        if (cached) {
+            return cached;
         }
 
-        // If not cached, return empty (user needs to run workflow manually)
-        console.warn(`[ActionsService] No cached apartados for ${catalogName}. Run query_relay workflow manually.`);
+        // Cache miss - dispatch workflow
+        console.log('[ActionsService] Cache miss for catalogs, dispatching...');
+        const result = await dispatchAndWait('get_catalogs', '') as { catalogs: CatalogInfo[] };
+
+        // Save to cache
+        await smartCache.set(cacheKey, result.catalogs, TTL.catalogs);
+
+        return result.catalogs;
+    },
+
+    /**
+     * Get structure (dimensions) of a catalog
+     */
+    getStructure: async (catalogName: string): Promise<DimensionInfo[]> => {
+        const cacheKey = CACHE_KEYS.structure(catalogName);
+
+        const cached = await smartCache.get<DimensionInfo[]>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        console.log(`[ActionsService] Cache miss for ${catalogName} structure, dispatching...`);
+        const result = await dispatchAndWait('discover_structure', catalogName) as { dimensions: DimensionInfo[] };
+
+        await smartCache.set(cacheKey, result.dimensions, TTL.structure);
+
+        return result.dimensions;
+    },
+
+    /**
+     * Get apartados (variables) - large dataset, prefer cache
+     */
+    getApartados: async (catalogName: string): Promise<ApartadoInfo[]> => {
+        const cacheKey = CACHE_KEYS.apartados(catalogName);
+
+        const cached = await smartCache.get<ApartadoInfo[]>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        console.log(`[ActionsService] Cache miss for ${catalogName} apartados, dispatching...`);
+        const result = await dispatchAndWait('get_apartados', catalogName) as { apartados: ApartadoInfo[] };
+
+        await smartCache.set(cacheKey, result.apartados, TTL.apartados);
+
+        return result.apartados;
+    },
+
+    /**
+     * Get variables for selected apartados
+     */
+    getVariables: async (catalogName: string, _apartados?: string[]): Promise<ApartadoInfo[]> => {
+        // Variables are children of apartados - for now return from cache if available
+        const cacheKey = CACHE_KEYS.apartados(catalogName) + '_vars';
+
+        const cached = await smartCache.get<ApartadoInfo[]>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        console.log(`[ActionsService] Variables not cached for ${catalogName}`);
+        // Return empty - variables require specific query
         return [];
     },
 
-    getVariables: async (catalogName: string, apartados?: string[]) => {
-        const data = await fetchGistData();
-        const cacheFile = data[`variables_${catalogName}.json`];
-
-        if (cacheFile && cacheFile.data && cacheFile.data.variables) {
-            return cacheFile.data.variables;
-        }
-
-        console.warn(`[ActionsService] No cached variables for ${catalogName}.`);
-        return [];
+    /**
+     * Get dimensions for filtering
+     */
+    getDimensions: async (catalogName: string): Promise<DimensionInfo[]> => {
+        // Alias for getStructure
+        return actionsService.getStructure(catalogName);
     },
 
-    getDimensions: async (catalogName: string) => {
-        const data = await fetchGistData();
-        const cacheFile = data[`dimensions_${catalogName}.json`];
-
-        if (cacheFile && cacheFile.data && cacheFile.data.dimensions) {
-            return cacheFile.data.dimensions;
-        }
-
-        console.warn(`[ActionsService] No cached dimensions for ${catalogName}.`);
-        return [];
-    },
-
+    /**
+     * Get members of a dimension
+     */
     getMembers: async (
         catalogName: string,
         dimension: string,
-        hierarchy: string,
-        level: string
-    ) => {
-        const data = await fetchGistData();
-        const cacheFile = data[`members_${catalogName}_${dimension}.json`];
+        _hierarchy?: string,
+        _level?: string
+    ): Promise<ApartadoInfo[]> => {
+        const cacheKey = CACHE_KEYS.members(catalogName, dimension.replace(/[\[\]]/g, ''));
 
-        if (cacheFile && cacheFile.data && cacheFile.data.members) {
-            return cacheFile.data.members;
+        const cached = await smartCache.get<ApartadoInfo[]>(cacheKey);
+        if (cached) {
+            return cached;
         }
 
-        console.warn(`[ActionsService] No cached members for ${catalogName}/${dimension}.`);
+        console.log(`[ActionsService] Cache miss for ${catalogName}/${dimension} members`);
+        // For now, return empty - user should pre-cache via workflow
         return [];
     },
 
-    executeQuery: async (payload: any) => {
-        // For queries, we would need to dispatch - but for now return empty
-        console.warn('[ActionsService] Query execution requires manual workflow dispatch.');
-        return { rows: [], columns: [], rowCount: 0, error: 'Use manual workflow dispatch for queries' };
+    /**
+     * Execute MDX query - not cached by default
+     */
+    executeQuery: async (payload: {
+        catalog: string;
+        mdx?: string;
+        filters?: Array<{ member_unique_name: string }>;
+    }): Promise<{ rows: unknown[]; columns: unknown[]; rowCount: number; error?: string }> => {
+        console.log('[ActionsService] Executing query...');
+
+        try {
+            const result = await dispatchAndWait('execute_mdx', payload.catalog, {
+                mdx: payload.mdx,
+            }) as { rows: unknown[]; columns: unknown[]; rowCount: number; error?: string };
+
+            return result;
+        } catch (e) {
+            return {
+                rows: [],
+                columns: [],
+                rowCount: 0,
+                error: e instanceof Error ? e.message : 'Unknown error',
+            };
+        }
+    },
+
+    /**
+     * Clear all cache
+     */
+    clearCache: async (): Promise<void> => {
+        await smartCache.clearAll();
+        console.log('[ActionsService] Cache cleared');
+    },
+
+    /**
+     * Preload common data into cache
+     */
+    preloadCache: async (): Promise<void> => {
+        console.log('[ActionsService] Preloading cache...');
+
+        try {
+            // Load catalogs
+            await actionsService.getCatalogs();
+            console.log('[ActionsService] Catalogs preloaded');
+        } catch (e) {
+            console.warn('[ActionsService] Preload failed:', e);
+        }
     },
 };
+
+export type { CatalogInfo, ApartadoInfo, DimensionInfo };
