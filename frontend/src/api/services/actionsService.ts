@@ -116,9 +116,25 @@ async function dispatchAndWait(
                 const resultFile = gist.files[`${requestId}.json`];
 
                 if (resultFile) {
-                    const result = JSON.parse(resultFile.content);
-                    console.log(`[ActionsService] Result received for ${requestId}`);
-                    return result.data;
+                    console.log(`[ActionsService] Result received for ${requestId} (${resultFile.size} bytes)`);
+
+                    let resultData;
+
+                    // TRUNCATION FIX: If content is truncated (or simply fetch the raw_url always for safety)
+                    // The Gist API truncates files >1MB in the 'content' field.
+                    // We should ALWAYS fetch raw_url for data files.
+                    if (resultFile.truncated || !resultFile.content) {
+                        console.log(`[ActionsService] File truncated, fetching raw content from: ${resultFile.raw_url}`);
+                        const rawResponse = await fetch(resultFile.raw_url);
+                        if (!rawResponse.ok) throw new Error(`Failed to fetch raw gist content: ${rawResponse.status}`);
+                        const rawText = await rawResponse.text();
+                        resultData = JSON.parse(rawText);
+                    } else {
+                        // Small file, content is present
+                        resultData = JSON.parse(resultFile.content);
+                    }
+
+                    return resultData.data;
                 }
             }
         } catch (e) {
