@@ -139,9 +139,8 @@ def get_apartados(catalog: str) -> dict:
         logger.info(f"Using dimension for Apartados: {var_dim}")
         
         # Get Members directly from schema - SAFER/FASTER than MDX on large cubes
-        # MODIFIED: Do NOT filter by Level=1 strictly. Get L1, L2, L3 and sort.
-        # Some cubes (DEFUNCIONES_2024) have mixed structures.
-        query = f"SELECT [MEMBER_UNIQUE_NAME], [MEMBER_CAPTION], [LEVEL_NUMBER] FROM $system.MDSchema_Members WHERE [CUBE_NAME]='{main_cube}' AND [DIMENSION_UNIQUE_NAME]='{var_dim}' AND [LEVEL_NUMBER] > 0 ORDER BY [LEVEL_NUMBER] ASC"
+        # MODIFIED: Include LEVEL_NAME to replicate "Scanner" logic (e.g. filter by "Apartado")
+        query = f"SELECT [MEMBER_UNIQUE_NAME], [MEMBER_CAPTION], [LEVEL_NUMBER], [LEVEL_NAME] FROM $system.MDSchema_Members WHERE [CUBE_NAME]='{main_cube}' AND [DIMENSION_UNIQUE_NAME]='{var_dim}' AND [LEVEL_NUMBER] > 0 ORDER BY [LEVEL_NUMBER] ASC"
         
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -150,21 +149,28 @@ def get_apartados(catalog: str) -> dict:
         members = []
         if rows:
             columns = [column[0] for column in cursor.description]
+            all_candidates = [dict(zip(columns, row)) for row in rows]
+
+            # --- SMART FILTERING STRATEGY (Scanner Logic) ---
             
-            # Smart Hierarchy Selection:
-            # We ordered by LEVEL_NUMBER ASC. The first row has the lowest level (e.g. 1).
-            # We only want members of that level (Apartados), ignoring deeper levels (Variables L2).
-            # If L1 is empty (some cubes), it will pick up L2 automatically.
-            target_level = rows[0][2] # LEVEL_NUMBER is 3rd column
+            # 1. Try strict filter by LEVEL_NAME == 'Apartado' (Common in SIS cubes)
+            filtered_members = [m for m in all_candidates if m.get('LEVEL_NAME') == 'Apartado']
             
-            logger.info(f"Auto-detected top level: {target_level} (filtering {len(rows)} candidates)")
-            
-            for row in rows:
-                if row[2] == target_level:
-                    members.append(dict(zip(columns, row)))
+            if filtered_members:
+                logger.info(f"Filtered by LEVEL_NAME='Apartado': {len(filtered_members)} items")
+                members = filtered_members
+            else:
+                # 2. Fallback: Filter by lowest available Level Number (Original Logic)
+                # Useful for cubes where Apartado might be named differently (e.g. "Nivel 1")
+                if all_candidates:
+                    min_level = min(m['LEVEL_NUMBER'] for m in all_candidates)
+                    members = [m for m in all_candidates if m['LEVEL_NUMBER'] == min_level]
+                    logger.info(f"Fallback to Level {min_level} filtering: {len(members)} items")
                 else:
-                    # Since it is sorted, we can stop processing once we hit deeper levels
-                    break
+                    members = []
+
+        logger.info(f"Total apartados found: {len(members)}")
+        result = {"apartados": members}
         
         # If empty at >0 (unlikely for valid dim), try Level 0 (All) children potentially?
         # But usually Level > 0 catch actual members. 
