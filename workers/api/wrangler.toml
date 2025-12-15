@@ -1,0 +1,5 @@
+name = "olap-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+[vars]
+# Estas van en secrets (siguiente task)
