@@ -1,0 +1,65 @@
+name: OLAP Async Execution
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: 'Job UUID from database'
+        required: true
+
+jobs:
+  execute:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      # OLEDB Provider Setup (Essential for adodbapi)
+      - name: Cache OLEDB Installer
+        id: cache-oledb
+        uses: actions/cache@v4
+        with:
+          path: SQL_AS_OLEDB.msi
+          key: oledb-installer-v1
+
+      - name: Download OLEDB Provider
+        if: steps.cache-oledb.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          $url = "https://go.microsoft.com/fwlink/?linkid=829576"
+          $output = "SQL_AS_OLEDB.msi"
+          Invoke-WebRequest -Uri $url -OutFile $output
+
+      - name: Install OLEDB Provider
+        shell: powershell
+        run: |
+          Start-Process msiexec.exe -ArgumentList '/i', 'SQL_AS_OLEDB.msi', '/quiet', '/norestart' -Wait
+
+      # Install Dependencies
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install "setuptools==57.5.0" wheel
+          
+          # Install adodbapi (needs manual handling on Windows sometimes, but pip often works now. 
+          # Using the proven method from previous workflows to be safe)
+          pip install https://files.pythonhosted.org/packages/source/a/adodbapi/adodbapi-2.6.2.0.zip
+          
+          # Install psycopg2 (binary for easier install) and other libs
+          pip install psycopg2-binary pandas pywin32
+
+      # Execute Runner
+      - name: Run DB Runner
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DGIS_SERVER: ${{ secrets.DGIS_SERVER }}
+          DGIS_USER: ${{ secrets.DGIS_USER }}
+          DGIS_PASSWORD: ${{ secrets.DGIS_PASSWORD }}
+        run: python backend/db_runner.py --job-id ${{ inputs.job_id }}
