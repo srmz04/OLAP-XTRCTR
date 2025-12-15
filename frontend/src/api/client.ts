@@ -15,11 +15,13 @@ export const olapApi = {
     async getMembers(
         catalog: string,
         nivel?: 'Apartado' | 'Variable',
+        parent?: string,
         limit = 1000,
         offset = 0
     ): Promise<MembersResponse> {
         const params = new URLSearchParams({
             ...(nivel && { nivel }),
+            ...(parent && { parent }),
             limit: limit.toString(),
             offset: offset.toString(),
         });
@@ -32,10 +34,15 @@ export const olapApi = {
     },
 
     async getApartados(catalog: string, limit = 1000): Promise<MembersResponse> {
-        return this.getMembers(catalog, 'Apartado', limit);
+        return this.getMembers(catalog, 'Apartado', undefined, limit);
     },
 
     async getVariables(catalog: string, limit = 1000): Promise<MembersResponse> {
-        return this.getMembers(catalog, 'Variable', limit);
+        return this.getMembers(catalog, 'Variable', undefined, limit);
+    },
+
+    async getVariablesOfApartado(catalog: string, apartadoUniqueName: string, limit = 1000): Promise<MembersResponse> {
+        return this.getMembers(catalog, 'Variable', apartadoUniqueName, limit);
     },
 };
+```
