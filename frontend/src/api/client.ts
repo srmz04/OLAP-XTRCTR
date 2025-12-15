@@ -45,4 +45,3 @@ export const olapApi = {
         return this.getMembers(catalog, 'Variable', apartadoUniqueName, limit);
     },
 };
-```
