@@ -1,90 +1,71 @@
+// src/stores/wizardStore.ts
 import { create } from 'zustand';
-
-interface Variable {
-    id: string;
-    name: string;
-    uniqueName: string;
-    apartado: string;
-    hierarchy: string;
-}
-
-export interface DimensionConfig {
-    dimension: string;
-    hierarchy: string;
-    level: string;
-    depth?: number;
-    members?: string[];
-}
-
-export interface FilterConfig {
-    dimension: string;
-    hierarchy: string;
-    level?: string;
-    members: string[];
-    memberCaptions?: string[];
-}
+import type { Catalog, Apartado, Variable } from '../types/olap';
 
 interface WizardState {
-    // Current state
-    currentStep: number;
-    selectedCatalog: string;
+    // Current step
+    step: number;
 
-    // Step 1: Apartados
-    selectedApartadoIds: string[];
-
-    // Step 2: Variables
+    // Selected data
+    selectedCatalog: Catalog | null;
+    selectedApartados: Apartado[];
     selectedVariables: Variable[];
-
-    // Step 3: Dimensions
-    selectedRows: DimensionConfig[];      // DESGLOSES (max 3)
-    selectedFilters: FilterConfig[];       // FILTROS
 
     // Actions
     setStep: (step: number) => void;
-    nextStep: () => void;
-    prevStep: () => void;
-
-    setCatalog: (catalog: string) => void;
-    setApartados: (ids: string[]) => void;
-    setVariables: (variables: Variable[]) => void;
-
-    setRows: (rows: DimensionConfig[]) => void;
-    setFilters: (filters: FilterConfig[]) => void;
-
+    selectCatalog: (catalog: Catalog) => void;
+    toggleApartado: (apartado: Apartado) => void;
+    toggleVariable: (variable: Variable) => void;
+    clearSelections: () => void;
     reset: () => void;
 }
 
-const initialState = {
-    currentStep: 1,
-    selectedCatalog: '',
-    selectedApartadoIds: [],
-    selectedVariables: [],
-    selectedRows: [],
-    selectedFilters: [],
-};
-
 export const useWizardStore = create<WizardState>((set) => ({
-    ...initialState,
+    step: 1,
+    selectedCatalog: null,
+    selectedApartados: [],
+    selectedVariables: [],
 
-    setStep: (step: number) => set({ currentStep: step }),
+    setStep: (step) => set({ step }),
 
-    nextStep: () => set((state) => ({
-        currentStep: Math.min(state.currentStep + 1, 4)
-    })),
+    selectCatalog: (catalog) => set({
+        selectedCatalog: catalog,
+        step: 2,
+        selectedApartados: [],
+        selectedVariables: [],
+    }),
 
-    prevStep: () => set((state) => ({
-        currentStep: Math.max(state.currentStep - 1, 1)
-    })),
+    toggleApartado: (apartado) => set((state) => {
+        const exists = state.selectedApartados.some(
+            (a) => a.unique_name === apartado.unique_name
+        );
+        return {
+            selectedApartados: exists
+                ? state.selectedApartados.filter((a) => a.unique_name !== apartado.unique_name)
+                : [...state.selectedApartados, apartado],
+        };
+    }),
 
-    setCatalog: (catalog: string) => set({ selectedCatalog: catalog }),
+    toggleVariable: (variable) => set((state) => {
+        const exists = state.selectedVariables.some(
+            (v) => v.unique_name === variable.unique_name
+        );
+        return {
+            selectedVariables: exists
+                ? state.selectedVariables.filter((v) => v.unique_name !== variable.unique_name)
+                : [...state.selectedVariables, variable],
+        };
+    }),
 
-    setApartados: (ids: string[]) => set({ selectedApartadoIds: ids }),
+    clearSelections: () => set({
+        selectedApartados: [],
+        selectedVariables: [],
+    }),
 
-    setVariables: (variables: Variable[]) => set({ selectedVariables: variables }),
-
-    setRows: (rows: DimensionConfig[]) => set({ selectedRows: rows }),
-
-    setFilters: (filters: FilterConfig[]) => set({ selectedFilters: filters }),
-
-    reset: () => set(initialState),
+    reset: () => set({
+        step: 1,
+        selectedCatalog: null,
+        selectedApartados: [],
+        selectedVariables: [],
+    }),
 }));
