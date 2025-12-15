@@ -2,20 +2,21 @@
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { olapApi } from './api/client';
 import { useWizardStore } from './stores/wizardStore';
+import { buildMdxQuery } from './utils/mdxBuilder';
 import { Loader2, CheckCircle2 } from 'lucide-react';
 
 const queryClient = new QueryClient();
 
 function WizardContent() {
-  const { 
-    step, 
-    selectedCatalog, 
-    selectedApartados, 
+  const {
+    step,
+    selectedCatalog,
+    selectedApartados,
     selectedVariables,
-    selectCatalog, 
-    toggleApartado, 
+    selectCatalog,
+    toggleApartado,
     toggleVariable,
-    setStep 
+    setStep
   } = useWizardStore();
 
   // Fetch catalogs
@@ -36,14 +37,14 @@ function WizardContent() {
     queryKey: ['variables', selectedCatalog?.code, selectedApartados.map(a => a.unique_name).join(',')],
     queryFn: async () => {
       if (selectedApartados.length === 0) return { members: [], total: 0 };
-      
+
       // Fetch variables for all selected apartados
       const results = await Promise.all(
-        selectedApartados.map(apartado => 
+        selectedApartados.map(apartado =>
           olapApi.getVariablesOfApartado(selectedCatalog!.code, apartado.unique_name)
         )
       );
-      
+
       // Combine all variables
       const allVariables = results.flatMap(r => r.members);
       return { members: allVariables, total: allVariables.length };
@@ -73,13 +74,12 @@ function WizardContent() {
           {[1, 2, 3, 4].map((s) => (
             <div
               key={s}
-              className={`flex items-center justify-center w-12 h-12 rounded-full font-bold transition-all ${
-                step === s
-                  ? 'bg-blue-500 text-white scale-110'
-                  : step > s
+              className={`flex items-center justify-center w-12 h-12 rounded-full font-bold transition-all ${step === s
+                ? 'bg-blue-500 text-white scale-110'
+                : step > s
                   ? 'bg-green-500 text-white'
                   : 'bg-gray-700 text-gray-400'
-              }`}
+                }`}
             >
               {s}
             </div>
@@ -92,7 +92,7 @@ function WizardContent() {
             <h2 className="text-3xl font-bold text-white mb-6">
               Paso 1: Selecciona un Catálogo
             </h2>
-            
+
             {catalogsLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
@@ -156,11 +156,10 @@ function WizardContent() {
                       <button
                         key={apartado.unique_name}
                         onClick={() => toggleApartado(apartado as any)}
-                        className={`w-full text-left p-4 rounded-lg transition-all ${
-                          isSelected
-                            ? 'bg-green-500/30 border-2 border-green-400'
-                            : 'bg-gray-700/50 hover:bg-gray-600/50 border-2 border-transparent'
-                        }`}
+                        className={`w-full text-left p-4 rounded-lg transition-all ${isSelected
+                          ? 'bg-green-500/30 border-2 border-green-400'
+                          : 'bg-gray-700/50 hover:bg-gray-600/50 border-2 border-transparent'
+                          }`}
                       >
                         <div className="flex items-center justify-between">
                           <div>
@@ -233,11 +232,10 @@ function WizardContent() {
                       <button
                         key={variable.unique_name}
                         onClick={() => toggleVariable(variable as any)}
-                        className={`w-full text-left p-4 rounded-lg transition-all ${
-                          isSelected
-                            ? 'bg-purple-500/30 border-2 border-purple-400'
-                            : 'bg-gray-700/50 hover:bg-gray-600/50 border-2 border-transparent'
-                        }`}
+                        className={`w-full text-left p-4 rounded-lg transition-all ${isSelected
+                          ? 'bg-purple-500/30 border-2 border-purple-400'
+                          : 'bg-gray-700/50 hover:bg-gray-600/50 border-2 border-transparent'
+                          }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="text-white font-medium">{variable.caption}</div>
@@ -267,7 +265,7 @@ function WizardContent() {
         {step === 4 && (
           <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8">
             <h2 className="text-3xl font-bold text-white mb-6">
-              Paso 4: Resumen de Selección
+              Paso 4: Resumen y Query
             </h2>
 
             <div className="bg-green-500/20 border-2 border-green-400 rounded-xl p-6 mb-6">
@@ -279,12 +277,28 @@ function WizardContent() {
               </div>
             </div>
 
+            {/* MDX Preview */}
+            <div className="bg-gray-900 rounded-xl p-6 mb-6 border border-gray-700 shadow-inner">
+              <div className="flex justify-between items-center mb-4">
+                <h4 className="text-gray-400 text-sm font-mono uppercase tracking-wider">Generated MDX Query</h4>
+                <button
+                  onClick={() => navigator.clipboard.writeText(buildMdxQuery(selectedCatalog!, selectedVariables, selectedApartados))}
+                  className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded transition-colors"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre className="text-green-400 font-mono text-sm overflow-x-auto whitespace-pre-wrap">
+                {selectedCatalog && buildMdxQuery(selectedCatalog, selectedVariables, selectedApartados)}
+              </pre>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div>
                 <h4 className="text-lg font-semibold text-white mb-2">Apartados:</h4>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                   {selectedApartados.map((a) => (
-                    <div key={a.unique_name} className="bg-gray-700/50 p-3 rounded-lg text-gray-200 text-sm">
+                    <div key={a.unique_name} className="bg-gray-700/50 p-3 rounded-lg text-gray-200 text-sm truncate" title={a.caption}>
                       {a.caption}
                     </div>
                   ))}
@@ -293,9 +307,9 @@ function WizardContent() {
 
               <div>
                 <h4 className="text-lg font-semibold text-white mb-2">Variables:</h4>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                   {selectedVariables.map((v) => (
-                    <div key={v.unique_name} className="bg-gray-700/50 p-3 rounded-lg text-gray-200 text-sm">
+                    <div key={v.unique_name} className="bg-gray-700/50 p-3 rounded-lg text-gray-200 text-sm truncate" title={v.caption}>
                       {v.caption}
                     </div>
                   ))}
@@ -306,15 +320,16 @@ function WizardContent() {
             <div className="flex gap-4">
               <button
                 onClick={() => setStep(3)}
-                className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-3 rounded-lg"
+                className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-3 rounded-lg shadow-lg transition-transform active:scale-95"
               >
                 ← Volver
               </button>
               <button
-                onClick={() => alert('MDX execution coming soon!')}
-                className="flex-1 bg-gradient-to-r from-orange-600 to-orange-800 hover:from-orange-500 hover:to-orange-700 text-white py-3 rounded-lg font-bold"
+                onClick={() => alert('Execution logic will be connected in Phase 4.2')}
+                className="flex-1 bg-gradient-to-r from-orange-600 to-orange-800 hover:from-orange-500 hover:to-orange-700 text-white py-3 rounded-lg font-bold shadow-lg transition-transform active:scale-95 flex justify-center items-center gap-2"
               >
-                Ejecutar Query →
+                <span>Ejecutar Query</span>
+                <span className="text-xs bg-black/20 px-2 py-0.5 rounded">BETA</span>
               </button>
             </div>
           </div>
