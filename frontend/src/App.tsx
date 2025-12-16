@@ -1,4 +1,5 @@
 // src/App.tsx
+import { useState } from 'react';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { olapApi } from './api/client';
 import { useWizardStore } from './stores/wizardStore';
@@ -18,6 +19,54 @@ function WizardContent() {
     toggleVariable,
     setStep
   } = useWizardStore();
+
+  // Execution State
+  const [executionStatus, setExecutionStatus] = useState<'idle' | 'submitting' | 'running' | 'completed' | 'error'>('idle');
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [executionResult, setExecutionResult] = useState<any>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleExecute = async () => {
+    if (!selectedCatalog) return;
+
+    setExecutionStatus('submitting');
+    setErrorMessage(null);
+
+    try {
+      const mdx = buildMdxQuery(selectedCatalog, selectedVariables, selectedApartados);
+      const { jobId } = await olapApi.createJob(selectedCatalog.code, mdx);
+      setJobId(jobId);
+      setExecutionStatus('running');
+
+      // Poll for status
+      const poll = async () => {
+        try {
+          const { job } = await olapApi.getJob(jobId);
+          if (job.status === 'COMPLETED') {
+            setExecutionResult(job.result_data);
+            setExecutionStatus('completed');
+          } else if (job.status === 'FAILED') {
+            setErrorMessage(job.error_message || 'Unknown error');
+            setExecutionStatus('error');
+          } else {
+            // Keep polling
+            setTimeout(poll, 2000);
+          }
+        } catch (e) {
+          console.error("Polling error", e);
+          // Retry polling on network error, don't fail immediately
+          setTimeout(poll, 2000);
+        }
+      };
+
+      setTimeout(poll, 2000);
+
+    } catch (e) {
+      setExecutionStatus('error');
+      setErrorMessage(e instanceof Error ? e.message : 'Submission failed');
+    }
+  };
+
 
   // Fetch catalogs
   const { data: catalogsData, isLoading: catalogsLoading } = useQuery({
@@ -325,13 +374,67 @@ function WizardContent() {
                 ← Volver
               </button>
               <button
-                onClick={() => alert('Execution logic will be connected in Phase 4.2')}
-                className="flex-1 bg-gradient-to-r from-orange-600 to-orange-800 hover:from-orange-500 hover:to-orange-700 text-white py-3 rounded-lg font-bold shadow-lg transition-transform active:scale-95 flex justify-center items-center gap-2"
+                onClick={handleExecute}
+                disabled={executionStatus === 'submitting' || executionStatus === 'running'}
+                className={`flex-1 ${executionStatus === 'submitting' || executionStatus === 'running'
+                    ? 'bg-gray-500 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-orange-600 to-orange-800 hover:from-orange-500 hover:to-orange-700'
+                  } text-white py-3 rounded-lg font-bold shadow-lg transition-transform active:scale-95 flex justify-center items-center gap-2`}
               >
-                <span>Ejecutar Query</span>
-                <span className="text-xs bg-black/20 px-2 py-0.5 rounded">BETA</span>
+                {executionStatus === 'submitting' || executionStatus === 'running' ? (
+                  <>
+                    <Loader2 className="animate-spin w-5 h-5" />
+                    <span>{executionStatus === 'submitting' ? 'Enviando...' : 'Ejecutando...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Ejecutar Query</span>
+                    <span className="text-xs bg-black/20 px-2 py-0.5 rounded">BETA</span>
+                  </>
+                )}
               </button>
             </div>
+
+            {/* Execution Result */}
+            {executionStatus === 'completed' && executionResult && (
+              <div className="mt-6 bg-gray-900 rounded-xl p-6 border border-green-500/50">
+                <h3 className="text-green-400 font-bold mb-4 flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5" />
+                  Resultados ({executionResult.count} filas)
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-gray-300">
+                    <thead>
+                      <tr className="border-b border-gray-700 text-left">
+                        {executionResult.columns.map((col: string) => (
+                          <th key={col} className="p-2">{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {executionResult.data.slice(0, 10).map((row: any[], i: number) => (
+                        <tr key={i} className="border-b border-gray-800 hover:bg-white/5">
+                          {row.map((cell, j) => (
+                            <td key={j} className="p-2 truncate max-w-[200px]">{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {executionResult.count > 10 && (
+                    <p className="text-xs text-center mt-2 text-gray-500">Mostrando 10 de {executionResult.count} filas</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Error Message */}
+            {executionStatus === 'error' && errorMessage && (
+              <div className="mt-6 bg-red-900/50 text-red-200 p-4 rounded-xl border border-red-500/50">
+                <p className="font-bold">Error en la ejecución:</p>
+                <pre className="text-xs mt-2 overflow-x-auto">{errorMessage}</pre>
+              </div>
+            )}
           </div>
         )}
       </div>

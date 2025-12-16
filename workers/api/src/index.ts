@@ -3,9 +3,11 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import catalogs from './routes/catalogs';
 import members from './routes/members';
+import jobs from './routes/jobs';
 
 type Bindings = {
     DATABASE_URL: string;
+    GH_TOKEN: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
