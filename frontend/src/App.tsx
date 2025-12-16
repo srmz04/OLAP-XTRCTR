@@ -22,7 +22,6 @@ function WizardContent() {
 
   // Execution State
   const [executionStatus, setExecutionStatus] = useState<'idle' | 'submitting' | 'running' | 'completed' | 'error'>('idle');
-  const [jobId, setJobId] = useState<string | null>(null);
   const [executionResult, setExecutionResult] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -35,7 +34,6 @@ function WizardContent() {
     try {
       const mdx = buildMdxQuery(selectedCatalog, selectedVariables, selectedApartados);
       const { jobId } = await olapApi.createJob(selectedCatalog.code, mdx);
-      setJobId(jobId);
       setExecutionStatus('running');
 
       // Poll for status
@@ -377,8 +375,8 @@ function WizardContent() {
                 onClick={handleExecute}
                 disabled={executionStatus === 'submitting' || executionStatus === 'running'}
                 className={`flex-1 ${executionStatus === 'submitting' || executionStatus === 'running'
-                    ? 'bg-gray-500 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-orange-600 to-orange-800 hover:from-orange-500 hover:to-orange-700'
+                  ? 'bg-gray-500 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-orange-600 to-orange-800 hover:from-orange-500 hover:to-orange-700'
                   } text-white py-3 rounded-lg font-bold shadow-lg transition-transform active:scale-95 flex justify-center items-center gap-2`}
               >
                 {executionStatus === 'submitting' || executionStatus === 'running' ? (

@@ -17,9 +17,22 @@ export function buildMdxQuery(
         return '-- No items selected';
     }
 
-    const rowSet = `{\n    ${rowItems.map(item => item.unique_name).join(',\n    ')}\n  }`;
+    // 3. Fix dimension names for SIS_2025
+    // The DB has old dimension names, but the cube uses 2025 versions
+    const fixedRowItems = rowItems.map(item => {
+        let fixedName = item.unique_name;
 
-    // 3. Construct Query
+        // Replace dimension names with 2025 versions
+        fixedName = fixedName.replace('[DIM VARIABLES]', '[DIM VARIABLES2025]');
+        fixedName = fixedName.replace('[DIM UNIDADES]', '[DIM UNIDADES2025]');
+        fixedName = fixedName.replace('[DIM TIEMPO]', '[DIM TIEMPO]'); // This one doesn't change
+
+        return fixedName;
+    });
+
+    const rowSet = `{\n    ${fixedRowItems.join(',\n    ')}\n  }`;
+
+    // 4. Construct Query
     return `SELECT
   ${columns} ON COLUMNS,
   NON EMPTY ${rowSet} ON ROWS
