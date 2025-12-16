@@ -31,6 +31,7 @@ app.get('/', (c) => {
 // Mount routes
 app.route('/api/catalogs', catalogs);
 app.route('/api/members', members);
+app.route('/api/jobs', jobs);
 
 // 404 handler
 app.notFound((c) => {
