@@ -7,7 +7,7 @@ import argparse
 from datetime import datetime
 
 def run_job(job_id):
-    print(f"🚀 Starting job runner for ID: {job_id}")
+    print(f"[START] Job runner for ID: {job_id}")
     
     # 1. Connect to Postgres
     try:
@@ -17,9 +17,9 @@ def run_job(job_id):
             
         conn_pg = psycopg2.connect(db_url)
         cur_pg = conn_pg.cursor()
-        print("✅ Connected to PostgreSQL")
+        print("[OK] Connected to PostgreSQL")
     except Exception as e:
-        print(f"❌ Failed to connect to DB: {e}")
+        print(f"[ERROR] Failed to connect to DB: {e}")
         sys.exit(1)
 
     try:
@@ -28,19 +28,19 @@ def run_job(job_id):
         job = cur_pg.fetchone()
         
         if not job:
-            print(f"❌ Job {job_id} not found in database")
+            print(f"[ERROR] Job {job_id} not found in database")
             sys.exit(1)
 
         mdx_query, catalog = job
-        print(f"📋 Job found: Catalog={catalog}")
-        print(f"📝 MDX Query length: {len(mdx_query)} chars")
+        print(f"[INFO] Job found: Catalog={catalog}")
+        print(f"[INFO] MDX Query length: {len(mdx_query)} chars")
 
         # 3. Update Status -> RUNNING
         cur_pg.execute("UPDATE jobs SET status = 'RUNNING', updated_at = NOW() WHERE id = %s", (job_id,))
         conn_pg.commit()
         
         # 4. Connect to OLAP Server
-        print("🔌 Connecting to OLAP server...")
+        print("[CONNECT] Connecting to OLAP server...")
         conn_str = (
             f"Provider=MSOLAP;Data Source={os.environ['DGIS_SERVER']};"
             f"Initial Catalog={catalog};"
@@ -50,17 +50,17 @@ def run_job(job_id):
         
         conn_olap = adodbapi.connect(conn_str)
         cur_olap = conn_olap.cursor()
-        print("✅ Connected to OLAP server")
+        print("[OK] Connected to OLAP server")
         
         # 5. Execute MDX
-        print("▶️ Executing MDX query...")
+        print("[EXEC] Executing MDX query...")
         start_time = datetime.now()
         cur_olap.execute(mdx_query)
         
         # Fetch data
         data = cur_olap.fetchall()
         duration = (datetime.now() - start_time).total_seconds()
-        print(f"✅ Query executed in {duration:.2f}s. Rows: {len(data)}")
+        print(f"[OK] Query executed in {duration:.2f}s. Rows: {len(data)}")
         
         # 6. Process Results
         # Get column names
@@ -81,16 +81,16 @@ def run_job(job_id):
         }
         
         # 7. Update Status -> COMPLETED
-        print("💾 Saving results to database...")
+        print("[SAVE] Saving results to database...")
         cur_pg.execute(
             "UPDATE jobs SET status = 'COMPLETED', result_data = %s, updated_at = NOW() WHERE id = %s", 
             (json.dumps(result_json), job_id)
         )
         conn_pg.commit()
-        print("✅ Job completed successfully")
+        print("[SUCCESS] Job completed successfully")
         
     except Exception as e:
-        print(f"❌ Error during execution: {e}")
+        print(f"[ERROR] Error during execution: {e}")
         # Try to log error to DB
         try:
             cur_pg.execute(
@@ -99,7 +99,7 @@ def run_job(job_id):
             )
             conn_pg.commit()
         except:
-            print("❌ Could not save error state to DB")
+            print("[ERROR] Could not save error state to DB")
         sys.exit(1)
         
     finally:
